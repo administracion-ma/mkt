@@ -75,3 +75,102 @@ export async function getRecentMedia(
     timestamp: item.timestamp,
   }));
 }
+
+async function graphPost<T>(path: string, params: Record<string, string>): Promise<T> {
+  const res = await fetch(`${GRAPH_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(params),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    throw new Error(`Graph API error en ${path}: ${JSON.stringify(body)}`);
+  }
+  return body as T;
+}
+
+export interface CreateContainerInput {
+  igUserId: string;
+  accessToken: string;
+  mediaUrl: string;
+  caption: string;
+  mediaType: "IMAGE" | "VIDEO" | "REELS";
+}
+
+export async function createMediaContainer(input: CreateContainerInput): Promise<string> {
+  const isVideo = input.mediaType === "VIDEO" || input.mediaType === "REELS";
+  const params: Record<string, string> = {
+    caption: input.caption,
+    access_token: input.accessToken,
+  };
+  if (isVideo) {
+    // El Graph API solo conoce media_type=REELS para video; un VIDEO normal
+    // se publica igual como reel (al consultarlo después, media_type vuelve "VIDEO").
+    params.media_type = "REELS";
+    params.video_url = input.mediaUrl;
+  } else {
+    params.image_url = input.mediaUrl;
+  }
+
+  const body = await graphPost<{ id: string }>(`/${input.igUserId}/media`, params);
+  return body.id;
+}
+
+export type ContainerStatusCode = "IN_PROGRESS" | "FINISHED" | "ERROR" | "EXPIRED" | "PUBLISHED";
+
+export async function getContainerStatus(
+  containerId: string,
+  accessToken: string
+): Promise<{ statusCode: ContainerStatusCode; statusText?: string }> {
+  const data = await graphGet<{ status_code: ContainerStatusCode; status?: string }>(
+    `/${containerId}`,
+    { fields: "status_code,status", access_token: accessToken }
+  );
+  return { statusCode: data.status_code, statusText: data.status };
+}
+
+export async function waitForContainerReady(
+  containerId: string,
+  accessToken: string,
+  options: { intervalMs?: number; timeoutMs?: number } = {}
+): Promise<void> {
+  const intervalMs = options.intervalMs ?? 5000;
+  const timeoutMs = options.timeoutMs ?? 5 * 60 * 1000;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const { statusCode, statusText } = await getContainerStatus(containerId, accessToken);
+    if (statusCode === "FINISHED") {
+      return;
+    }
+    if (statusCode === "ERROR" || statusCode === "EXPIRED") {
+      throw new Error(`El contenedor de media no se pudo procesar (${statusCode}): ${statusText ?? ""}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error("Tiempo de espera agotado procesando el contenedor de media");
+}
+
+export async function publishMediaContainer(
+  igUserId: string,
+  containerId: string,
+  accessToken: string
+): Promise<string> {
+  const body = await graphPost<{ id: string }>(`/${igUserId}/media_publish`, {
+    creation_id: containerId,
+    access_token: accessToken,
+  });
+  return body.id;
+}
+
+export async function getPublishedMediaPermalink(
+  mediaId: string,
+  accessToken: string
+): Promise<string | undefined> {
+  const data = await graphGet<{ permalink?: string }>(`/${mediaId}`, {
+    fields: "permalink",
+    access_token: accessToken,
+  });
+  return data.permalink;
+}
