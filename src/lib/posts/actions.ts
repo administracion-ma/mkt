@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
+import { put } from "@vercel/blob";
 import { db } from "@/db/client";
 import { posts } from "@/db/schema";
 
@@ -9,14 +10,17 @@ export async function createPost(formData: FormData) {
   const pillarId = Number(formData.get("pillarId"));
   const caption = String(formData.get("caption") ?? "").trim();
   const mediaType = String(formData.get("mediaType") ?? "");
-  const mediaUrl = String(formData.get("mediaUrl") ?? "").trim();
   const scheduledAtRaw = String(formData.get("scheduledAt") ?? "");
+  const mediaFile = formData.get("mediaFile");
 
-  if (!pillarId || !caption || !mediaUrl || !scheduledAtRaw) {
+  if (!pillarId || !caption || !scheduledAtRaw) {
     throw new Error("Faltan campos obligatorios");
   }
   if (mediaType !== "IMAGE" && mediaType !== "VIDEO" && mediaType !== "REELS") {
     throw new Error("Tipo de contenido inválido");
+  }
+  if (!(mediaFile instanceof File) || mediaFile.size === 0) {
+    throw new Error("Falta el archivo a subir");
   }
 
   const scheduledAt = new Date(scheduledAtRaw);
@@ -24,11 +28,15 @@ export async function createPost(formData: FormData) {
     throw new Error("Fecha y hora inválida");
   }
 
+  const blob = await put(`posts/${Date.now()}-${mediaFile.name}`, mediaFile, {
+    access: "public",
+  });
+
   await db.insert(posts).values({
     pillarId,
     caption,
     mediaType,
-    mediaUrl,
+    mediaUrl: blob.url,
     scheduledAt,
     status: "SCHEDULED",
   });

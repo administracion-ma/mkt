@@ -90,12 +90,12 @@ export default async function CalendarPage() {
           </label>
 
           <label>
-            URL del archivo (imagen/video público)
+            Archivo (imagen o video, subido desde tu compu)
             <input
-              type="url"
-              name="mediaUrl"
+              type="file"
+              name="mediaFile"
+              accept="image/*,video/*"
               required
-              placeholder="https://..."
               style={inputStyle}
             />
           </label>
