@@ -16,6 +16,12 @@ export const env = {
   get metaAppSecret() {
     return required("META_APP_SECRET");
   },
+  get instagramAppId() {
+    return required("INSTAGRAM_APP_ID");
+  },
+  get instagramAppSecret() {
+    return required("INSTAGRAM_APP_SECRET");
+  },
   get metaRedirectUri() {
     return required("META_REDIRECT_URI");
   },

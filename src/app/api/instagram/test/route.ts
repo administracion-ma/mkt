@@ -15,8 +15,8 @@ export async function GET() {
 
   try {
     const [summary, recentMedia] = await Promise.all([
-      getAccountSummary(account.igUserId, account.pageAccessToken),
-      getRecentMedia(account.igUserId, account.pageAccessToken, 10),
+      getAccountSummary(account.igUserId, account.accessToken),
+      getRecentMedia(account.igUserId, account.accessToken, 10),
     ]);
 
     return NextResponse.json({

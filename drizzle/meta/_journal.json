@@ -8,6 +8,13 @@
       "when": 1782825880543,
       "tag": "0000_dizzy_iron_monger",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782900000000,
+      "tag": "0001_ig_accounts_single_token",
+      "breakpoints": true
     }
   ]
 }

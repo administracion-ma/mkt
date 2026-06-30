@@ -6,9 +6,7 @@ import { decryptSecret, encryptSecret } from "@/lib/crypto";
 interface SaveAccountInput {
   igUserId: string;
   igUsername: string;
-  fbPageId: string;
-  pageAccessToken: string;
-  userAccessToken: string;
+  accessToken: string;
   expiresInSeconds: number;
 }
 
@@ -21,9 +19,7 @@ export async function saveConnectedAccount(input: SaveAccountInput) {
   const values = {
     igUserId: input.igUserId,
     igUsername: input.igUsername,
-    fbPageId: input.fbPageId,
-    pageAccessTokenEnc: encryptSecret(input.pageAccessToken),
-    userAccessTokenEnc: encryptSecret(input.userAccessToken),
+    accessTokenEnc: encryptSecret(input.accessToken),
     tokenExpiresAt,
     updatedAt: new Date(),
   };
@@ -46,7 +42,6 @@ export async function getConnectedAccount() {
   }
   return {
     ...account,
-    pageAccessToken: decryptSecret(account.pageAccessTokenEnc),
-    userAccessToken: decryptSecret(account.userAccessTokenEnc),
+    accessToken: decryptSecret(account.accessTokenEnc),
   };
 }

@@ -1,21 +1,18 @@
 import { env } from "@/lib/env";
 
-const GRAPH_BASE = "https://graph.facebook.com";
-const FB_OAUTH_DIALOG = "https://www.facebook.com";
+const IG_OAUTH_BASE = "https://api.instagram.com";
+const IG_GRAPH_BASE = "https://graph.instagram.com";
 
 const SCOPES = [
-  "instagram_basic",
-  "instagram_content_publish",
-  "instagram_manage_insights",
-  "instagram_manage_comments",
-  "pages_show_list",
-  "pages_read_engagement",
-  "business_management",
+  "instagram_business_basic",
+  "instagram_business_content_publish",
+  "instagram_business_manage_comments",
+  "instagram_business_manage_insights",
 ].join(",");
 
 export function buildAuthorizeUrl(state: string): string {
-  const url = new URL(`${FB_OAUTH_DIALOG}/${env.metaGraphApiVersion}/dialog/oauth`);
-  url.searchParams.set("client_id", env.metaAppId);
+  const url = new URL(`${IG_OAUTH_BASE}/oauth/authorize`);
+  url.searchParams.set("client_id", env.instagramAppId);
   url.searchParams.set("redirect_uri", env.metaRedirectUri);
   url.searchParams.set("state", state);
   url.searchParams.set("scope", SCOPES);
@@ -23,79 +20,69 @@ export function buildAuthorizeUrl(state: string): string {
   return url.toString();
 }
 
-async function graphGet<T>(path: string, params: Record<string, string>): Promise<T> {
-  const url = new URL(`${GRAPH_BASE}/${env.metaGraphApiVersion}${path}`);
-  for (const [key, value] of Object.entries(params)) {
-    url.searchParams.set(key, value);
-  }
-  const res = await fetch(url.toString());
+export async function exchangeCodeForShortLivedToken(
+  code: string
+): Promise<{ accessToken: string; igUserId: string }> {
+  const form = new URLSearchParams();
+  form.set("client_id", env.instagramAppId);
+  form.set("client_secret", env.instagramAppSecret);
+  form.set("grant_type", "authorization_code");
+  form.set("redirect_uri", env.metaRedirectUri);
+  form.set("code", code);
+
+  const res = await fetch(`${IG_OAUTH_BASE}/oauth/access_token`, {
+    method: "POST",
+    body: form,
+  });
   const body = await res.json();
   if (!res.ok) {
-    throw new Error(`Graph API error en ${path}: ${JSON.stringify(body)}`);
+    throw new Error(`Error al intercambiar el code: ${JSON.stringify(body)}`);
   }
-  return body as T;
-}
-
-export async function exchangeCodeForShortLivedToken(code: string): Promise<string> {
-  const data = await graphGet<{ access_token: string }>("/oauth/access_token", {
-    client_id: env.metaAppId,
-    client_secret: env.metaAppSecret,
-    redirect_uri: env.metaRedirectUri,
-    code,
-  });
-  return data.access_token;
+  return { accessToken: body.access_token, igUserId: String(body.user_id) };
 }
 
 export async function exchangeForLongLivedToken(
   shortLivedToken: string
 ): Promise<{ accessToken: string; expiresInSeconds: number }> {
-  const data = await graphGet<{ access_token: string; expires_in: number }>(
-    "/oauth/access_token",
-    {
-      grant_type: "fb_exchange_token",
-      client_id: env.metaAppId,
-      client_secret: env.metaAppSecret,
-      fb_exchange_token: shortLivedToken,
-    }
-  );
-  return { accessToken: data.access_token, expiresInSeconds: data.expires_in };
+  const url = new URL(`${IG_GRAPH_BASE}/access_token`);
+  url.searchParams.set("grant_type", "ig_exchange_token");
+  url.searchParams.set("client_secret", env.instagramAppSecret);
+  url.searchParams.set("access_token", shortLivedToken);
+
+  const res = await fetch(url.toString());
+  const body = await res.json();
+  if (!res.ok) {
+    throw new Error(`Error al obtener token de larga duración: ${JSON.stringify(body)}`);
+  }
+  return { accessToken: body.access_token, expiresInSeconds: body.expires_in };
 }
 
 export async function refreshLongLivedToken(
   currentLongLivedToken: string
 ): Promise<{ accessToken: string; expiresInSeconds: number }> {
-  return exchangeForLongLivedToken(currentLongLivedToken);
-}
+  const url = new URL(`${IG_GRAPH_BASE}/refresh_access_token`);
+  url.searchParams.set("grant_type", "ig_refresh_token");
+  url.searchParams.set("access_token", currentLongLivedToken);
 
-interface FacebookPage {
-  id: string;
-  name: string;
-  access_token: string;
-}
-
-export async function listPages(userAccessToken: string): Promise<FacebookPage[]> {
-  const data = await graphGet<{ data: FacebookPage[] }>("/me/accounts", {
-    access_token: userAccessToken,
-  });
-  return data.data;
+  const res = await fetch(url.toString());
+  const body = await res.json();
+  if (!res.ok) {
+    throw new Error(`Error al refrescar el token: ${JSON.stringify(body)}`);
+  }
+  return { accessToken: body.access_token, expiresInSeconds: body.expires_in };
 }
 
 export async function getConnectedInstagramAccount(
-  pageId: string,
-  pageAccessToken: string
-): Promise<{ id: string; username: string } | null> {
-  const data = await graphGet<{
-    instagram_business_account?: { id: string };
-  }>(`/${pageId}`, {
-    fields: "instagram_business_account",
-    access_token: pageAccessToken,
-  });
-  if (!data.instagram_business_account) {
-    return null;
+  accessToken: string
+): Promise<{ id: string; username: string }> {
+  const url = new URL(`${IG_GRAPH_BASE}/me`);
+  url.searchParams.set("fields", "id,username");
+  url.searchParams.set("access_token", accessToken);
+
+  const res = await fetch(url.toString());
+  const body = await res.json();
+  if (!res.ok) {
+    throw new Error(`Error al obtener la cuenta de Instagram: ${JSON.stringify(body)}`);
   }
-  const igAccount = await graphGet<{ id: string; username: string }>(
-    `/${data.instagram_business_account.id}`,
-    { fields: "id,username", access_token: pageAccessToken }
-  );
-  return igAccount;
+  return body;
 }

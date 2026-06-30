@@ -4,7 +4,6 @@ import {
   exchangeCodeForShortLivedToken,
   exchangeForLongLivedToken,
   getConnectedInstagramAccount,
-  listPages,
 } from "@/lib/instagram/oauth";
 import { saveConnectedAccount } from "@/lib/instagram/account-store";
 
@@ -31,40 +30,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const shortLivedToken = await exchangeCodeForShortLivedToken(code);
-    const { accessToken: userAccessToken, expiresInSeconds } =
-      await exchangeForLongLivedToken(shortLivedToken);
+    const { accessToken: shortLivedToken } = await exchangeCodeForShortLivedToken(code);
+    const { accessToken, expiresInSeconds } = await exchangeForLongLivedToken(shortLivedToken);
+    const igAccount = await getConnectedInstagramAccount(accessToken);
 
-    const pages = await listPages(userAccessToken);
-    if (pages.length === 0) {
-      return NextResponse.json(
-        { error: "Tu usuario de Facebook no administra ninguna Página." },
-        { status: 400 }
-      );
-    }
+    await saveConnectedAccount({
+      igUserId: igAccount.id,
+      igUsername: igAccount.username,
+      accessToken,
+      expiresInSeconds,
+    });
 
-    for (const page of pages) {
-      const igAccount = await getConnectedInstagramAccount(page.id, page.access_token);
-      if (igAccount) {
-        await saveConnectedAccount({
-          igUserId: igAccount.id,
-          igUsername: igAccount.username,
-          fbPageId: page.id,
-          pageAccessToken: page.access_token,
-          userAccessToken,
-          expiresInSeconds,
-        });
-        return NextResponse.redirect(new URL("/?connected=1", request.url));
-      }
-    }
-
-    return NextResponse.json(
-      {
-        error:
-          "Ninguna de tus Páginas de Facebook tiene una cuenta de Instagram Business vinculada.",
-      },
-      { status: 400 }
-    );
+    return NextResponse.redirect(new URL("/?connected=1", request.url));
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Error desconocido" },

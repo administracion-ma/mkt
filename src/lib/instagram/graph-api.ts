@@ -1,9 +1,7 @@
-import { env } from "@/lib/env";
-
-const GRAPH_BASE = "https://graph.facebook.com";
+const GRAPH_BASE = "https://graph.instagram.com";
 
 async function graphGet<T>(path: string, params: Record<string, string>): Promise<T> {
-  const url = new URL(`${GRAPH_BASE}/${env.metaGraphApiVersion}${path}`);
+  const url = new URL(`${GRAPH_BASE}${path}`);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
