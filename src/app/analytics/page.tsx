@@ -4,7 +4,7 @@ import { posts, postMetrics } from "@/db/schema";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
 import { getAccountSummary } from "@/lib/instagram/graph-api";
 import { PeriodFilter } from "@/components/PeriodFilter";
-import { AnalyticsTable, type PostRow } from "@/components/AnalyticsTable";
+import { PostCards, type PostCardRow } from "@/components/PostCards";
 
 export const dynamic = "force-dynamic";
 
@@ -68,8 +68,8 @@ export default async function AnalyticsPage({
     if (!latestMetrics.has(m.postId)) latestMetrics.set(m.postId, m);
   }
 
-  // Build rows for the table (serializable for client component)
-  const rows: PostRow[] = publishedPosts.map((p) => {
+  // Build rows for the cards (serializable for client component)
+  const rows: PostCardRow[] = publishedPosts.map((p) => {
     const m = latestMetrics.get(p.id);
     return {
       id: p.id,
@@ -77,6 +77,7 @@ export default async function AnalyticsPage({
       mediaType: p.mediaType,
       caption: p.caption ?? null,
       igPermalink: p.igPermalink ?? null,
+      mediaUrl: p.mediaUrl ?? null,
       reach: m?.reach ?? null,
       plays: m?.plays ?? null,
       likeCount: m?.likeCount ?? null,
@@ -214,11 +215,10 @@ export default async function AnalyticsPage({
         )}
       </div>
 
-      {/* Posts table */}
+      {/* Posts cards */}
       <div className="card">
         <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "1.25rem", color: "var(--text-secondary)" }}>
           {publishedPosts.length} post{publishedPosts.length !== 1 ? "s" : ""} · {periodLabel}
-          <span style={{ fontWeight: 400, marginLeft: "0.75rem", opacity: 0.6 }}>Hacé click en cualquier columna para ordenar</span>
         </h2>
 
         {rows.length === 0 ? (
@@ -231,7 +231,7 @@ export default async function AnalyticsPage({
             </p>
           </div>
         ) : (
-          <AnalyticsTable rows={rows} />
+          <PostCards rows={rows} />
         )}
       </div>
     </main>
