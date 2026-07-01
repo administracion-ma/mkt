@@ -25,6 +25,22 @@ function fmt(n: number | null | undefined): string {
   return String(n);
 }
 
+function fmtPct(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return `${(n * 100).toFixed(1)}%`;
+}
+
+function fmtSec(ms: number | null | undefined): string {
+  if (ms == null) return "—";
+  const s = ms / 1000;
+  return s >= 60 ? `${Math.floor(s / 60)}m${Math.round(s % 60)}s` : `${s.toFixed(1)}s`;
+}
+
+function hookRate(plays: number | null | undefined, reach: number | null | undefined): string {
+  if (!plays || !reach) return "—";
+  return `${((plays / reach) * 100).toFixed(1)}%`;
+}
+
 export default async function AnalyticsPage({
   searchParams,
 }: {
@@ -195,17 +211,23 @@ export default async function AnalyticsPage({
                   <th>Tipo</th>
                   <th>Caption</th>
                   <th style={{ textAlign: "right" }}>Alcance</th>
-                  <th style={{ textAlign: "right" }}>Impr.</th>
+                  <th style={{ textAlign: "right" }}>Views</th>
+                  <th style={{ textAlign: "right" }}>Hook%</th>
+                  <th style={{ textAlign: "right" }}>Avg Watch</th>
+                  <th style={{ textAlign: "right" }}>Skip%</th>
                   <th style={{ textAlign: "right" }}>Likes</th>
                   <th style={{ textAlign: "right" }}>Coment.</th>
                   <th style={{ textAlign: "right" }}>Guard.</th>
                   <th style={{ textAlign: "right" }}>Shares</th>
+                  <th style={{ textAlign: "right" }}>+Seg.</th>
+                  <th style={{ textAlign: "right" }}>Visitas</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {publishedPosts.map((post) => {
                   const m = latestMetrics.get(post.id);
+                  const isReel = post.mediaType === "REELS";
                   return (
                     <tr key={post.id}>
                       <td className="muted" style={{ whiteSpace: "nowrap", fontSize: "0.775rem" }}>
@@ -222,17 +244,28 @@ export default async function AnalyticsPage({
                           {MEDIA_TYPE_LABEL[post.mediaType]}
                         </span>
                       </td>
-                      <td style={{ maxWidth: "240px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)", fontSize: "0.8rem" }}>
+                      <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)", fontSize: "0.8rem" }}>
                         {post.caption || <span style={{ color: "var(--text-tertiary)" }}>Sin caption</span>}
                       </td>
                       <td className="num" style={{ color: m?.reach ? "var(--accent)" : "var(--text-tertiary)", fontWeight: m?.reach ? 600 : 400 }}>
                         {fmt(m?.reach)}
                       </td>
-                      <td className="num muted">{fmt(m?.impressions)}</td>
+                      <td className="num muted">{fmt(m?.plays)}</td>
+                      <td className="num" style={{ color: "var(--text-secondary)", fontSize: "0.78rem" }}>
+                        {isReel ? hookRate(m?.plays, m?.reach) : "—"}
+                      </td>
+                      <td className="num muted" style={{ fontSize: "0.78rem" }}>
+                        {isReel ? fmtSec(m?.avgWatchTimeMs) : "—"}
+                      </td>
+                      <td className="num muted" style={{ fontSize: "0.78rem" }}>
+                        {isReel ? fmtPct(m?.skipRate) : "—"}
+                      </td>
                       <td className="num muted">{fmt(m?.likeCount)}</td>
                       <td className="num muted">{fmt(m?.commentCount)}</td>
                       <td className="num muted">{fmt(m?.savedCount)}</td>
                       <td className="num muted">{fmt(m?.sharesCount)}</td>
+                      <td className="num muted">{fmt(m?.followsCount)}</td>
+                      <td className="num muted">{fmt(m?.profileVisits)}</td>
                       <td>
                         {post.igPermalink && (
                           <a href={post.igPermalink} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", fontSize: "0.75rem", whiteSpace: "nowrap" }}>

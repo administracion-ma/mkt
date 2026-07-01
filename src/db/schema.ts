@@ -65,6 +65,8 @@ export const postMetrics = pgTable("post_metrics", {
   skipRate: doublePrecision("skip_rate"),
   profileLinkClicks: integer("profile_link_clicks"),
   totalInteractions: integer("total_interactions"),
+  followsCount: integer("follows_count"),
+  profileVisits: integer("profile_visits"),
 });
 
 export const analysisReports = pgTable("analysis_reports", {

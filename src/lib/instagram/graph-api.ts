@@ -231,12 +231,18 @@ export interface MediaInsights {
   sharesCount?: number;
   plays?: number;
   totalInteractions?: number;
+  avgWatchTimeMs?: number;
+  skipRate?: number;
+  followsCount?: number;
+  profileVisits?: number;
 }
+
+export type MediaType = "IMAGE" | "VIDEO" | "REELS";
 
 export async function getMediaInsights(
   mediaId: string,
   accessToken: string,
-  isVideo: boolean
+  mediaType: MediaType
 ): Promise<MediaInsights> {
   const result: MediaInsights = {};
 
@@ -252,10 +258,14 @@ export async function getMediaInsights(
     // insights permission might not cover this field
   }
 
-  // impressions is not supported for VIDEO/REELS; use views for video view count
-  const metricsList = isVideo
-    ? ["reach", "saved", "shares", "total_interactions", "views"]
-    : ["impressions", "reach", "saved", "shares", "total_interactions"];
+  // impressions not supported for VIDEO/REELS; reels have extra engagement metrics
+  const metricsList =
+    mediaType === "REELS"
+      ? ["reach", "saved", "shares", "total_interactions", "views",
+         "ig_reels_avg_watch_time", "reels_skip_rate", "follows", "profile_visits"]
+      : mediaType === "VIDEO"
+      ? ["reach", "saved", "shares", "total_interactions", "views", "follows", "profile_visits"]
+      : ["impressions", "reach", "saved", "shares", "total_interactions", "follows", "profile_visits"];
 
   try {
     const data = await graphGet<{
@@ -271,12 +281,16 @@ export async function getMediaInsights(
         typeof item.value === "number" ? item.value : item.values?.[0]?.value;
       if (value === undefined) continue;
       switch (item.name) {
-        case "impressions":        result.impressions = value; break;
-        case "reach":              result.reach = value; break;
-        case "saved":              result.savedCount = value; break;
-        case "shares":             result.sharesCount = value; break;
-        case "views":              result.plays = value; break;
-        case "total_interactions": result.totalInteractions = value; break;
+        case "impressions":              result.impressions = value; break;
+        case "reach":                    result.reach = value; break;
+        case "saved":                    result.savedCount = value; break;
+        case "shares":                   result.sharesCount = value; break;
+        case "views":                    result.plays = value; break;
+        case "total_interactions":       result.totalInteractions = value; break;
+        case "ig_reels_avg_watch_time":  result.avgWatchTimeMs = value; break;
+        case "reels_skip_rate":          result.skipRate = value; break;
+        case "follows":                  result.followsCount = value; break;
+        case "profile_visits":           result.profileVisits = value; break;
       }
     }
   } catch (err) {

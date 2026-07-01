@@ -31,8 +31,11 @@ async function main() {
   for (const post of withMedia) {
     console.log(`-> Post #${post.id} (${post.igMediaId})`);
     try {
-      const isVideo = post.mediaType === "VIDEO" || post.mediaType === "REELS";
-      const insights = await getMediaInsights(post.igMediaId!, account.accessToken, isVideo);
+      const insights = await getMediaInsights(
+        post.igMediaId!,
+        account.accessToken,
+        post.mediaType as "IMAGE" | "VIDEO" | "REELS"
+      );
 
       const metricsData = {
         reach: insights.reach ?? null,
@@ -43,6 +46,10 @@ async function main() {
         sharesCount: insights.sharesCount ?? null,
         plays: insights.plays ?? null,
         totalInteractions: insights.totalInteractions ?? null,
+        avgWatchTimeMs: insights.avgWatchTimeMs ?? null,
+        skipRate: insights.skipRate ?? null,
+        followsCount: insights.followsCount ?? null,
+        profileVisits: insights.profileVisits ?? null,
         capturedAt: new Date(),
       };
 
@@ -61,7 +68,7 @@ async function main() {
       }
 
       console.log(
-        `   OK reach=${insights.reach ?? "—"} plays=${insights.plays ?? "—"} impresiones=${insights.impressions ?? "—"} likes=${insights.likeCount ?? "—"} guardados=${insights.savedCount ?? "—"}`
+        `   OK reach=${insights.reach ?? "—"} views=${insights.plays ?? "—"} likes=${insights.likeCount ?? "—"} guard=${insights.savedCount ?? "—"} avgWatch=${insights.avgWatchTimeMs != null ? `${(insights.avgWatchTimeMs / 1000).toFixed(1)}s` : "—"} skip=${insights.skipRate != null ? `${(insights.skipRate * 100).toFixed(1)}%` : "—"}`
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido";
