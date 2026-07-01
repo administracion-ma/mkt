@@ -15,7 +15,8 @@ jobs:
 
       - run: npm ci
 
-      - name: Aplicar schema a la base de datos
-        run: npm run db:push
+      - name: Aplicar migraciones a la base de datos
+        run: npx tsx scripts/migrate.ts
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
