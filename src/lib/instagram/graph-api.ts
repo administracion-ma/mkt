@@ -331,8 +331,8 @@ export async function getMediaInsights(
         if (item.name === "follows")        result.followsCount = value;
         if (item.name === "profile_visits") result.profileVisits = value;
       }
-    } catch {
-      // not available for this media type
+    } catch (err) {
+      console.error(`[follows/visits] ${mediaId}:`, err instanceof Error ? err.message : err);
     }
   }
 
