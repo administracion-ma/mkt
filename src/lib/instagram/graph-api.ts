@@ -252,9 +252,10 @@ export async function getMediaInsights(
     // insights permission might not cover this field
   }
 
-  // "views" is the API name for video view count (stored as `plays` in our schema)
-  const metricsList = ["impressions", "reach", "saved", "shares", "total_interactions"];
-  if (isVideo) metricsList.push("views");
+  // impressions is not supported for VIDEO/REELS; use views for video view count
+  const metricsList = isVideo
+    ? ["reach", "saved", "shares", "total_interactions", "views"]
+    : ["impressions", "reach", "saved", "shares", "total_interactions"];
 
   try {
     const data = await graphGet<{
