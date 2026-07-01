@@ -54,9 +54,37 @@ function sortValue(r: PostCardRow, key: SortKey): number {
   }
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function Stat({ label, value, accent, tooltip }: { label: string; value: string; accent?: boolean; tooltip?: string }) {
+  const [visible, setVisible] = useState(false);
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 56 }}>
+    <div
+      style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", minWidth: 56, cursor: "help" }}
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      {tooltip && visible && (
+        <div style={{
+          position: "absolute",
+          bottom: "calc(100% + 8px)",
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "#18181b",
+          color: "#e4e4e7",
+          fontSize: "0.72rem",
+          lineHeight: 1.5,
+          padding: "0.45rem 0.7rem",
+          borderRadius: 8,
+          border: "1px solid rgba(255,255,255,0.1)",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+          whiteSpace: "normal",
+          width: 200,
+          textAlign: "center",
+          zIndex: 50,
+          pointerEvents: "none",
+        }}>
+          {tooltip}
+        </div>
+      )}
       <span style={{ fontWeight: 700, fontSize: "1rem", color: accent ? "var(--accent)" : "var(--text-primary)", letterSpacing: "-0.02em" }}>
         {value}
       </span>
@@ -203,21 +231,93 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
 
                 {/* Stats */}
                 <div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap", alignItems: "flex-start" }}>
-                  <Stat label="Alcance" value={fmt(row.reach)} accent={!!row.reach} />
+                  <Stat
+                    label="Alcance"
+                    value={fmt(row.reach)}
+                    accent={!!row.reach}
+                    tooltip="Personas únicas que vieron este post. Es la base para calcular todo lo demás."
+                  />
                   <div style={{ width: 1, background: "var(--border)", alignSelf: "stretch", margin: "0 0.35rem" }} />
-                  <Stat label="ER%" value={erVal != null ? `${(erVal * 100).toFixed(1)}%` : "—"} accent={erGood} />
-                  {video && <><div style={{ width: 1, background: "var(--border)", alignSelf: "stretch", margin: "0 0.35rem" }} /><Stat label="Views" value={fmt(row.plays)} /></>}
-                  {video && <Stat label="Play%" value={hrVal != null ? `${(hrVal * 100).toFixed(1)}%` : "—"} />}
-                  {video && <Stat label="Watch" value={fmtSec(row.avgWatchTimeMs)} />}
-                  {video && row.skipRate != null && <Stat label="Skip%" value={`${row.skipRate.toFixed(1)}%`} />}
+                  <Stat
+                    label="ER%"
+                    value={erVal != null ? `${(erVal * 100).toFixed(1)}%` : "—"}
+                    accent={erGood}
+                    tooltip="Engagement Rate: de cada 100 personas que lo vieron, cuántas reaccionaron (likes + comentarios + guardados + compartidos). Arriba del 5% es muy bueno."
+                  />
+                  {video && (
+                    <>
+                      <div style={{ width: 1, background: "var(--border)", alignSelf: "stretch", margin: "0 0.35rem" }} />
+                      <Stat
+                        label="Views"
+                        value={fmt(row.plays)}
+                        tooltip="Veces que se reprodujo el video. Puede ser mayor al alcance porque una misma persona puede verlo varias veces."
+                      />
+                    </>
+                  )}
+                  {video && (
+                    <Stat
+                      label="Play%"
+                      value={hrVal != null ? `${(hrVal * 100).toFixed(1)}%` : "—"}
+                      tooltip="Reproducciones divididas por alcance. Si supera el 100% significa que la gente lo volvió a ver. Cuanto más alto, más atrapó la atención."
+                    />
+                  )}
+                  {video && (
+                    <Stat
+                      label="Watch"
+                      value={fmtSec(row.avgWatchTimeMs)}
+                      tooltip="Tiempo promedio que una persona miró el video antes de salir. Cuanto más alto, mejor: el algoritmo premia los videos que retienen la atención."
+                    />
+                  )}
+                  {video && row.skipRate != null && (
+                    <Stat
+                      label="Skip%"
+                      value={`${row.skipRate.toFixed(1)}%`}
+                      tooltip="Porcentaje de personas que lo saltaron sin reproducirlo. Menos es mejor: si es alto, puede ser que la miniatura o el primer segundo no enganchan."
+                    />
+                  )}
                   <div style={{ width: 1, background: "var(--border)", alignSelf: "stretch", margin: "0 0.35rem" }} />
-                  <Stat label="Likes" value={fmt(row.likeCount)} />
-                  <Stat label="Coment." value={fmt(row.commentCount)} />
-                  <Stat label="Guard." value={fmt(row.savedCount)} />
-                  <Stat label="Guard.%" value={srVal != null ? `${(srVal * 100).toFixed(2)}%` : "—"} />
-                  <Stat label="Shares" value={fmt(row.sharesCount)} />
-                  {row.followsCount != null && <><div style={{ width: 1, background: "var(--border)", alignSelf: "stretch", margin: "0 0.35rem" }} /><Stat label="+Seg." value={fmt(row.followsCount)} /></>}
-                  {row.profileVisits != null && <Stat label="Visitas" value={fmt(row.profileVisits)} />}
+                  <Stat
+                    label="Likes"
+                    value={fmt(row.likeCount)}
+                    tooltip="Cantidad de 'me gusta'. Es la interacción más básica y la menos valorada por el algoritmo."
+                  />
+                  <Stat
+                    label="Coment."
+                    value={fmt(row.commentCount)}
+                    tooltip="Cantidad de comentarios. El algoritmo los valora más que los likes porque implican mayor esfuerzo del usuario."
+                  />
+                  <Stat
+                    label="Guard."
+                    value={fmt(row.savedCount)}
+                    tooltip="Veces que alguien guardó este post para verlo después. Es la señal más fuerte para el algoritmo de Instagram."
+                  />
+                  <Stat
+                    label="Guard.%"
+                    value={srVal != null ? `${(srVal * 100).toFixed(2)}%` : "—"}
+                    tooltip="Guardados dividido por alcance. La métrica más importante: si alguien guarda tu contenido, Instagram lo impulsa masivamente."
+                  />
+                  <Stat
+                    label="Shares"
+                    value={fmt(row.sharesCount)}
+                    tooltip="Veces que compartieron el post (por DM o en historias). Cada share lleva tu contenido a personas que no te siguen."
+                  />
+                  {row.followsCount != null && (
+                    <>
+                      <div style={{ width: 1, background: "var(--border)", alignSelf: "stretch", margin: "0 0.35rem" }} />
+                      <Stat
+                        label="+Seg."
+                        value={fmt(row.followsCount)}
+                        tooltip="Personas que empezaron a seguirte después de ver este post. Indica qué contenido convierte visitantes en seguidores."
+                      />
+                    </>
+                  )}
+                  {row.profileVisits != null && (
+                    <Stat
+                      label="Visitas"
+                      value={fmt(row.profileVisits)}
+                      tooltip="Personas que fueron a ver tu perfil después de ver este post. Muestra cuánto despertó la curiosidad por la cuenta."
+                    />
+                  )}
                 </div>
               </div>
             </div>
