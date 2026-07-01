@@ -34,7 +34,7 @@ async function main() {
       const insights = await getMediaInsights(
         post.igMediaId!,
         account.accessToken,
-        post.mediaType as "IMAGE" | "VIDEO" | "REELS"
+        post.mediaType as "IMAGE" | "VIDEO" | "REELS" | "CAROUSEL_ALBUM"
       );
 
       const metricsData = {

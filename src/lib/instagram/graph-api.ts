@@ -237,7 +237,7 @@ export interface MediaInsights {
   profileVisits?: number;
 }
 
-export type MediaType = "IMAGE" | "VIDEO" | "REELS";
+export type MediaType = "IMAGE" | "VIDEO" | "REELS" | "CAROUSEL_ALBUM";
 
 export async function getMediaInsights(
   mediaId: string,
@@ -264,7 +264,7 @@ export async function getMediaInsights(
          "ig_reels_avg_watch_time", "reels_skip_rate"]
       : mediaType === "VIDEO"
       ? ["reach", "saved", "shares", "total_interactions", "views"]
-      : ["reach", "saved", "shares", "total_interactions"];
+      : ["reach", "saved", "shares", "total_interactions"]; // IMAGE, CAROUSEL_ALBUM
 
   try {
     const data = await graphGet<{
@@ -294,6 +294,28 @@ export async function getMediaInsights(
   }
 
   if (mediaType === "REELS" || mediaType === "VIDEO") {
+    // Try Reels-specific retention metrics for VIDEO too — Meta labels many Reels as VIDEO
+    if (mediaType === "VIDEO") {
+      try {
+        const reelsExtra = await graphGet<{
+          data: Array<{ name: string; values?: Array<{ value: number }>; value?: number }>;
+        }>(`/${mediaId}/insights`, {
+          metric: "ig_reels_avg_watch_time,reels_skip_rate",
+          period: "lifetime",
+          access_token: accessToken,
+        });
+        for (const item of reelsExtra.data) {
+          const value =
+            typeof item.value === "number" ? item.value : item.values?.[0]?.value;
+          if (value === undefined) continue;
+          if (item.name === "ig_reels_avg_watch_time") result.avgWatchTimeMs = value;
+          if (item.name === "reels_skip_rate")          result.skipRate = value;
+        }
+      } catch {
+        // not a reel, skip
+      }
+    }
+
     try {
       const extra = await graphGet<{
         data: Array<{ name: string; values?: Array<{ value: number }>; value?: number }>;

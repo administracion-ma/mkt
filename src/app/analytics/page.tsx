@@ -11,11 +11,13 @@ const MEDIA_TYPE_BADGE: Record<string, string> = {
   IMAGE: "badge-image",
   VIDEO: "badge-video",
   REELS: "badge-reel",
+  CAROUSEL_ALBUM: "badge-image",
 };
 const MEDIA_TYPE_LABEL: Record<string, string> = {
   IMAGE: "Imagen",
   VIDEO: "Video",
   REELS: "Reel",
+  CAROUSEL_ALBUM: "Carrusel",
 };
 
 function fmt(n: number | null | undefined): string {
@@ -229,6 +231,7 @@ export default async function AnalyticsPage({
                   const m = latestMetrics.get(post.id);
                   const isReel = post.mediaType === "REELS";
                   const isVideo = post.mediaType === "VIDEO" || post.mediaType === "REELS";
+                  const isCarousel = post.mediaType === "CAROUSEL_ALBUM";
                   return (
                     <tr key={post.id}>
                       <td className="muted" style={{ whiteSpace: "nowrap", fontSize: "0.775rem" }}>
@@ -256,10 +259,10 @@ export default async function AnalyticsPage({
                         {isVideo ? hookRate(m?.plays, m?.reach) : "—"}
                       </td>
                       <td className="num muted" style={{ fontSize: "0.78rem" }}>
-                        {isReel ? fmtSec(m?.avgWatchTimeMs) : "—"}
+                        {isVideo ? fmtSec(m?.avgWatchTimeMs) : "—"}
                       </td>
                       <td className="num muted" style={{ fontSize: "0.78rem" }}>
-                        {isReel ? fmtPct(m?.skipRate) : "—"}
+                        {isVideo ? fmtPct(m?.skipRate) : "—"}
                       </td>
                       <td className="num muted">{fmt(m?.likeCount)}</td>
                       <td className="num muted">{fmt(m?.commentCount)}</td>
