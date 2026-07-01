@@ -56,6 +56,15 @@ async function main() {
         capturedAt: new Date(),
       };
 
+      // Si la API no devolvió nada útil, no tocar la BD (preserva datos anteriores)
+      const hasData = Object.entries(metricsData).some(
+        ([k, v]) => k !== "capturedAt" && v != null
+      );
+      if (!hasData) {
+        console.log(`   Sin datos de API, preservando métricas anteriores.`);
+        continue;
+      }
+
       const existingToday = await db.query.postMetrics.findFirst({
         where: and(
           eq(postMetrics.postId, post.id),
@@ -64,20 +73,19 @@ async function main() {
         ),
       });
 
-      const save = async (data: Partial<typeof metricsData> & { capturedAt: Date }) => {
-        if (existingToday) {
-          await db.update(postMetrics).set(data).where(eq(postMetrics.id, existingToday.id));
-        } else {
-          await db.insert(postMetrics).values({ postId: post.id, ...data });
+      if (existingToday) {
+        // Solo actualizar campos con valor real — nunca pisar buenos datos con null
+        const nonNullUpdate = Object.fromEntries(
+          Object.entries(metricsData).filter(([, v]) => v != null)
+        );
+        await db.update(postMetrics).set(nonNullUpdate).where(eq(postMetrics.id, existingToday.id));
+      } else {
+        try {
+          await db.insert(postMetrics).values({ postId: post.id, ...metricsData });
+        } catch {
+          const { repostsCount, followersReach, nonFollowersReach, ...legacyData } = metricsData;
+          await db.insert(postMetrics).values({ postId: post.id, ...legacyData });
         }
-      };
-
-      try {
-        await save(metricsData);
-      } catch {
-        // New columns not yet in DB — retry without them (run db-push to get full data)
-        const { repostsCount, followersReach, nonFollowersReach, ...legacyData } = metricsData;
-        await save(legacyData);
       }
 
       // Fill video duration if missing (needed for retention curve)
