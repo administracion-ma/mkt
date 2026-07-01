@@ -269,7 +269,7 @@ export async function getMediaInsights(
       ? ["reach", "saved", "shares", "reposts", "total_interactions", "views",
          "ig_reels_avg_watch_time", "reels_skip_rate"]
       : mediaType === "VIDEO"
-      ? ["reach", "saved", "shares", "reposts", "total_interactions", "views"]
+      ? ["reach", "saved", "shares", "total_interactions", "views"]
       : ["reach", "saved", "shares", "total_interactions"]; // IMAGE, CAROUSEL_ALBUM
 
   try {

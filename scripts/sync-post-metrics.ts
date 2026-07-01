@@ -64,10 +64,20 @@ async function main() {
         ),
       });
 
-      if (existingToday) {
-        await db.update(postMetrics).set(metricsData).where(eq(postMetrics.id, existingToday.id));
-      } else {
-        await db.insert(postMetrics).values({ postId: post.id, ...metricsData });
+      const save = async (data: typeof metricsData) => {
+        if (existingToday) {
+          await db.update(postMetrics).set(data).where(eq(postMetrics.id, existingToday.id));
+        } else {
+          await db.insert(postMetrics).values({ postId: post.id, ...data });
+        }
+      };
+
+      try {
+        await save(metricsData);
+      } catch {
+        // New columns not yet in DB — retry without them (run db-push to get full data)
+        const { repostsCount, followersReach, nonFollowersReach, ...legacyData } = metricsData;
+        await save(legacyData);
       }
 
       console.log(
