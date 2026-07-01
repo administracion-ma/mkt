@@ -228,6 +228,7 @@ export default async function AnalyticsPage({
                 {publishedPosts.map((post) => {
                   const m = latestMetrics.get(post.id);
                   const isReel = post.mediaType === "REELS";
+                  const isVideo = post.mediaType === "VIDEO" || post.mediaType === "REELS";
                   return (
                     <tr key={post.id}>
                       <td className="muted" style={{ whiteSpace: "nowrap", fontSize: "0.775rem" }}>
@@ -252,7 +253,7 @@ export default async function AnalyticsPage({
                       </td>
                       <td className="num muted">{fmt(m?.plays)}</td>
                       <td className="num" style={{ color: "var(--text-secondary)", fontSize: "0.78rem" }}>
-                        {isReel ? hookRate(m?.plays, m?.reach) : "—"}
+                        {isVideo ? hookRate(m?.plays, m?.reach) : "—"}
                       </td>
                       <td className="num muted" style={{ fontSize: "0.78rem" }}>
                         {isReel ? fmtSec(m?.avgWatchTimeMs) : "—"}

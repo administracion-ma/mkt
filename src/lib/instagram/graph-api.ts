@@ -293,7 +293,7 @@ export async function getMediaInsights(
     console.error(`[insights] ${mediaId}:`, err instanceof Error ? err.message : err);
   }
 
-  if (mediaType === "REELS") {
+  if (mediaType === "REELS" || mediaType === "VIDEO") {
     try {
       const extra = await graphGet<{
         data: Array<{ name: string; values?: Array<{ value: number }>; value?: number }>;
@@ -310,7 +310,7 @@ export async function getMediaInsights(
         if (item.name === "profile_visits") result.profileVisits = value;
       }
     } catch {
-      // not available for this reel
+      // not available for this media type
     }
   }
 
