@@ -12,7 +12,8 @@
     "db:studio": "drizzle-kit studio",
     "publish:scheduled": "tsx scripts/publish-scheduled-posts.ts",
     "sync:metrics": "tsx scripts/sync-post-metrics.ts",
-    "import:history": "tsx scripts/import-instagram-history.ts"
+    "import:history": "tsx scripts/import-instagram-history.ts",
+    "refresh:token": "tsx scripts/refresh-token.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",
