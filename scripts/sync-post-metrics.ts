@@ -2,7 +2,7 @@ import { and, eq, gte, lt } from "drizzle-orm";
 import { db } from "../src/db/client";
 import { posts, postMetrics } from "../src/db/schema";
 import { getConnectedAccount } from "../src/lib/instagram/account-store";
-import { getMediaInsights } from "../src/lib/instagram/graph-api";
+import { getMediaInsights, graphGetMediaDuration } from "../src/lib/instagram/graph-api";
 
 async function main() {
   const account = await getConnectedAccount();
@@ -78,6 +78,22 @@ async function main() {
         // New columns not yet in DB — retry without them (run db-push to get full data)
         const { repostsCount, followersReach, nonFollowersReach, ...legacyData } = metricsData;
         await save(legacyData);
+      }
+
+      // Fill video duration if missing (needed for retention curve)
+      if (
+        post.videoDurationMs == null &&
+        (post.mediaType === "VIDEO" || post.mediaType === "REELS")
+      ) {
+        try {
+          const durationMs = await graphGetMediaDuration(post.igMediaId!, account.accessToken);
+          if (durationMs != null) {
+            await db.update(posts).set({ videoDurationMs: durationMs }).where(eq(posts.id, post.id));
+            console.log(`   duración: ${(durationMs / 1000).toFixed(1)}s`);
+          }
+        } catch {
+          // not critical
+        }
       }
 
       console.log(

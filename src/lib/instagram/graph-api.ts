@@ -225,6 +225,17 @@ export async function getPublishedMediaPermalink(
   return data.permalink;
 }
 
+export async function graphGetMediaDuration(
+  mediaId: string,
+  accessToken: string
+): Promise<number | null> {
+  const data = await graphGet<{ duration?: number }>(`/${mediaId}`, {
+    fields: "duration",
+    access_token: accessToken,
+  });
+  return data.duration != null ? Math.round(data.duration * 1000) : null;
+}
+
 export interface MediaInsights {
   impressions?: number;
   reach?: number;
