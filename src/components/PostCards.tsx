@@ -286,7 +286,6 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
         play:    median(nums(r => rate(r.plays, r.reach))),
         skip:    median(nums(r => r.skipRate)),
         shares:  median(nums(r => r.sharesCount)),
-        follows: median(nums(r => r.followsCount)),
       };
     };
     return {
@@ -437,17 +436,7 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
                     <Stat label="Reposts" value={fmt(row.repostsCount)}
                       tooltip="Veces que alguien reposteó este contenido." />
                   )}
-                  {row.followsCount != null && (
-                    <><Div />
-                      <Stat label="+Seg." value={fmt(row.followsCount)}
-                        benchmark={bd ? bm(row.followsCount, bd.follows) : undefined}
-                        tooltip="Personas que empezaron a seguirte después de ver este post." />
-                    </>
-                  )}
-                  {row.profileVisits != null && (
-                    <Stat label="Visitas" value={fmt(row.profileVisits)}
-                      tooltip="Personas que fueron a ver tu perfil después de ver este post." />
-                  )}
+                  {/* followsCount and profileVisits not available via Instagram Login API */}
                 </div>
 
                 {/* Fila 2: tasas por señal de algoritmo — ordenadas por peso 2026 */}

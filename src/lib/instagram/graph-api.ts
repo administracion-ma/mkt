@@ -334,26 +334,9 @@ export async function getMediaInsights(
       }
     }
 
-    try {
-      const extra = await graphGet<{
-        data: Array<{ name: string; values?: Array<{ value: number }>; value?: number }>;
-      }>(`/${mediaId}/insights`, {
-        metric: "follows,profile_visits",
-        period: "lifetime",
-        access_token: accessToken,
-      });
-      for (const item of extra.data) {
-        const value =
-          typeof item.value === "number" ? item.value : item.values?.[0]?.value;
-        if (value === undefined) continue;
-        if (item.name === "follows")        result.followsCount = value;
-        if (item.name === "profile_visits") result.profileVisits = value;
-      }
-    } catch (err) {
-      console.error(`[follows/visits] ${mediaId}:`, err instanceof Error ? err.message : err);
-    }
-
     // Follower vs non-follower reach breakdown
+    // Note: "follows" and "profile_visits" per-media metrics are not supported
+    // by the Instagram Login API (only available via the old Facebook Login flow).
     try {
       const breakdown = await graphGet<{
         data: Array<{
