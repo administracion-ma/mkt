@@ -174,3 +174,65 @@ export async function getPublishedMediaPermalink(
   });
   return data.permalink;
 }
+
+export interface MediaInsights {
+  impressions?: number;
+  reach?: number;
+  likeCount?: number;
+  commentCount?: number;
+  savedCount?: number;
+  sharesCount?: number;
+  plays?: number;
+  totalInteractions?: number;
+}
+
+export async function getMediaInsights(
+  mediaId: string,
+  accessToken: string,
+  isVideo: boolean
+): Promise<MediaInsights> {
+  const result: MediaInsights = {};
+
+  // like_count and comments_count come from the media object directly
+  try {
+    const media = await graphGet<{ like_count?: number; comments_count?: number }>(
+      `/${mediaId}`,
+      { fields: "like_count,comments_count", access_token: accessToken }
+    );
+    if (media.like_count !== undefined) result.likeCount = media.like_count;
+    if (media.comments_count !== undefined) result.commentCount = media.comments_count;
+  } catch {
+    // insights permission might not cover this field
+  }
+
+  const metricsList = ["impressions", "reach", "saved", "shares", "total_interactions"];
+  if (isVideo) metricsList.push("plays");
+
+  try {
+    const data = await graphGet<{
+      data: Array<{ name: string; values?: Array<{ value: number }>; value?: number }>;
+    }>(`/${mediaId}/insights`, {
+      metric: metricsList.join(","),
+      period: "lifetime",
+      access_token: accessToken,
+    });
+
+    for (const item of data.data) {
+      const value =
+        typeof item.value === "number" ? item.value : item.values?.[0]?.value;
+      if (value === undefined) continue;
+      switch (item.name) {
+        case "impressions":        result.impressions = value; break;
+        case "reach":              result.reach = value; break;
+        case "saved":              result.savedCount = value; break;
+        case "shares":             result.sharesCount = value; break;
+        case "plays":              result.plays = value; break;
+        case "total_interactions": result.totalInteractions = value; break;
+      }
+    }
+  } catch {
+    // insights may not be available for all media types or account tiers
+  }
+
+  return result;
+}

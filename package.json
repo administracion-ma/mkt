@@ -10,7 +10,8 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "publish:scheduled": "tsx scripts/publish-scheduled-posts.ts"
+    "publish:scheduled": "tsx scripts/publish-scheduled-posts.ts",
+    "sync:metrics": "tsx scripts/sync-post-metrics.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",

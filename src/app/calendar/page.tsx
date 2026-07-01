@@ -1,30 +1,31 @@
-import Link from "next/link";
 import { db } from "@/db/client";
 import { createPost, deletePost } from "@/lib/posts/actions";
 
 export const dynamic = "force-dynamic";
 
-const MEDIA_TYPE_LABELS: Record<string, string> = {
+const MEDIA_TYPE_BADGE: Record<string, string> = {
+  IMAGE: "badge-image",
+  VIDEO: "badge-video",
+  REELS: "badge-reel",
+};
+const MEDIA_TYPE_LABEL: Record<string, string> = {
   IMAGE: "Imagen",
   VIDEO: "Video",
   REELS: "Reel",
 };
-
-const STATUS_LABELS: Record<string, string> = {
+const STATUS_BADGE: Record<string, string> = {
+  DRAFT: "badge-draft",
+  SCHEDULED: "badge-scheduled",
+  PUBLISHING: "badge-publishing",
+  PUBLISHED: "badge-published",
+  FAILED: "badge-failed",
+};
+const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Borrador",
   SCHEDULED: "Programado",
-  PUBLISHING: "Publicando",
+  PUBLISHING: "Publicando…",
   PUBLISHED: "Publicado",
   FAILED: "Falló",
-};
-
-const inputStyle: React.CSSProperties = {
-  display: "block",
-  width: "100%",
-  padding: "0.5rem",
-  marginTop: "0.25rem",
-  borderRadius: 6,
-  border: "1px solid #ccc",
 };
 
 export default async function CalendarPage() {
@@ -33,180 +34,123 @@ export default async function CalendarPage() {
     db.query.posts.findMany({ orderBy: (p, { asc }) => [asc(p.scheduledAt)] }),
   ]);
 
-  const pillarLabel = (id: number) =>
-    allPillars.find((p) => p.id === id)?.label ?? "—";
+  const pillarLabel = (id: number) => allPillars.find((p) => p.id === id)?.label ?? "—";
 
   return (
-    <main
-      style={{
-        maxWidth: 880,
-        margin: "3rem auto",
-        fontFamily: "sans-serif",
-        padding: "0 1rem",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <h1>Calendario de contenido</h1>
-        <Link href="/" style={{ color: "#1877F2" }}>
-          ← Conexión Instagram
-        </Link>
+    <main className="page">
+      <div className="page-header">
+        <h1 className="page-title">Calendario de contenido</h1>
+        <p className="page-subtitle">Programá y gestioná tus posts de Instagram</p>
       </div>
 
-      <section
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 8,
-          padding: "1.5rem",
-          marginBottom: "2rem",
-        }}
-      >
-        <h2 style={{ marginBottom: "1rem", fontSize: "1.1rem" }}>Nuevo post</h2>
-        <form action={createPost} style={{ display: "grid", gap: "0.75rem" }}>
+      {/* New post form */}
+      <div className="card" style={{ marginBottom: "1.75rem" }}>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "1.25rem", color: "var(--text)" }}>
+          Nuevo post
+        </h2>
+        <form action={createPost} className="form-grid">
+          <div className="form-row">
+            <label>
+              <span className="form-label">Pilar de contenido</span>
+              <select name="pillarId" required className="form-input" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.75rem center", paddingRight: "2rem" }}>
+                {allPillars.map((p) => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span className="form-label">Tipo de contenido</span>
+              <select name="mediaType" required className="form-input" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.75rem center", paddingRight: "2rem" }}>
+                <option value="IMAGE">Imagen</option>
+                <option value="VIDEO">Video</option>
+                <option value="REELS">Reel</option>
+              </select>
+            </label>
+          </div>
+
           <label>
-            Pilar
-            <select name="pillarId" required style={inputStyle}>
-              {allPillars.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+            <span className="form-label">Archivo (imagen o video desde tu computadora)</span>
+            <input type="file" name="mediaFile" accept="image/*,video/*" required className="form-input" />
           </label>
 
           <label>
-            Tipo de contenido
-            <select name="mediaType" required style={inputStyle}>
-              <option value="IMAGE">Imagen</option>
-              <option value="VIDEO">Video</option>
-              <option value="REELS">Reel</option>
-            </select>
+            <span className="form-label">Caption / texto del post</span>
+            <textarea name="caption" required rows={4} className="form-input" placeholder="Escribí el texto que va a acompañar tu post…" style={{ resize: "vertical" }} />
           </label>
 
           <label>
-            Archivo (imagen o video, subido desde tu compu)
-            <input
-              type="file"
-              name="mediaFile"
-              accept="image/*,video/*"
-              required
-              style={inputStyle}
-            />
+            <span className="form-label">Fecha y hora de publicación</span>
+            <input type="datetime-local" name="scheduledAt" required className="form-input" />
           </label>
 
-          <label>
-            Texto / caption
-            <textarea name="caption" required rows={4} style={inputStyle} />
-          </label>
-
-          <label>
-            Fecha y hora de publicación
-            <input type="datetime-local" name="scheduledAt" required style={inputStyle} />
-          </label>
-
-          <button
-            type="submit"
-            style={{
-              padding: "0.75rem",
-              background: "#1877F2",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              cursor: "pointer",
-              fontWeight: "bold",
-            }}
-          >
+          <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: "0.25rem" }}>
             Programar post
           </button>
         </form>
-      </section>
+      </div>
 
-      <section>
-        <h2 style={{ marginBottom: "1rem", fontSize: "1.1rem" }}>
-          Posts programados ({allPosts.length})
+      {/* Posts list */}
+      <div>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "1rem", color: "var(--text)" }}>
+          Posts ({allPosts.length})
         </h2>
-        {allPosts.length === 0 && <p>Todavía no hay posts cargados.</p>}
-        <div style={{ display: "grid", gap: "0.75rem" }}>
-          {allPosts.map((post) => (
-            <div
-              key={post.id}
-              style={{
-                border: "1px solid #ddd",
-                borderRadius: 8,
-                padding: "1rem",
-                display: "flex",
-                justifyContent: "space-between",
-                gap: "1rem",
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: "bold" }}>
-                  {new Date(post.scheduledAt).toLocaleString("es-AR", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
-                  {" · "}
-                  {MEDIA_TYPE_LABELS[post.mediaType]}
-                  {" · "}
-                  {pillarLabel(post.pillarId)}
-                </div>
-                <p style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
-                  {post.caption}
-                </p>
-                <a
-                  href={post.mediaUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: "#1877F2", fontSize: "0.9rem" }}
-                >
-                  Ver archivo
-                </a>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "flex-end",
-                  gap: "0.5rem",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "0.85rem",
-                    padding: "0.25rem 0.5rem",
-                    borderRadius: 4,
-                    background: "#eee",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {STATUS_LABELS[post.status]}
-                </span>
-                <form action={deletePost}>
-                  <input type="hidden" name="id" value={post.id} />
-                  <button
-                    type="submit"
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#c00",
-                      cursor: "pointer",
-                      fontSize: "0.85rem",
-                    }}
-                  >
-                    Eliminar
-                  </button>
-                </form>
-              </div>
+
+        {allPosts.length === 0 ? (
+          <div className="card">
+            <div className="empty">
+              <div className="empty-icon">📅</div>
+              <p>Todavía no hay posts cargados.<br />Usá el formulario de arriba para agregar el primero.</p>
             </div>
-          ))}
-        </div>
-      </section>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: "0.625rem" }}>
+            {allPosts.map((post) => (
+              <div key={post.id} className="post-card">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="post-card-meta">
+                    <span>
+                      {new Date(post.scheduledAt).toLocaleString("es-AR", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                    <span style={{ color: "var(--border)" }}>·</span>
+                    <span className={`badge ${MEDIA_TYPE_BADGE[post.mediaType]}`}>
+                      {MEDIA_TYPE_LABEL[post.mediaType]}
+                    </span>
+                    <span style={{ color: "var(--border)" }}>·</span>
+                    <span>{pillarLabel(post.pillarId)}</span>
+                    {post.igPermalink && (
+                      <>
+                        <span style={{ color: "var(--border)" }}>·</span>
+                        <a href={post.igPermalink} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", fontSize: "0.75rem" }}>
+                          Ver en Instagram →
+                        </a>
+                      </>
+                    )}
+                  </div>
+                  <p className="post-card-caption">{post.caption}</p>
+                </div>
+                <div className="post-card-actions">
+                  <span className={`badge ${STATUS_BADGE[post.status]}`}>
+                    {STATUS_LABEL[post.status]}
+                  </span>
+                  {post.status !== "PUBLISHED" && (
+                    <form action={deletePost}>
+                      <input type="hidden" name="id" value={post.id} />
+                      <button type="submit" className="btn btn-ghost">Eliminar</button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </main>
   );
 }
