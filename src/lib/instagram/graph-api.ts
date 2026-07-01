@@ -262,10 +262,10 @@ export async function getMediaInsights(
   const metricsList =
     mediaType === "REELS"
       ? ["reach", "saved", "shares", "total_interactions", "views",
-         "ig_reels_avg_watch_time", "reels_skip_rate", "follows", "profile_visits"]
+         "ig_reels_avg_watch_time", "reels_skip_rate"]
       : mediaType === "VIDEO"
-      ? ["reach", "saved", "shares", "total_interactions", "views", "follows", "profile_visits"]
-      : ["impressions", "reach", "saved", "shares", "total_interactions", "follows", "profile_visits"];
+      ? ["reach", "saved", "shares", "total_interactions", "views"]
+      : ["impressions", "reach", "saved", "shares", "total_interactions"];
 
   try {
     const data = await graphGet<{
