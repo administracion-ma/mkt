@@ -227,10 +227,15 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
     [rows, sortKey]
   );
 
+  // Benchmark siempre contra los últimos 10 posts (igual que Instagram Edits: "X de los 10 más recientes")
   const benchmarkData = useMemo(() => {
-    if (rows.length < 4) return null;
+    const recent = [...rows]
+      .filter(r => r.publishedAt != null)
+      .sort((a, b) => (b.publishedAt! > a.publishedAt! ? 1 : -1))
+      .slice(0, 10);
+    if (recent.length < 4) return null;
     const nums = (fn: (r: PostCardRow) => number | null) =>
-      rows.map(fn).filter((v): v is number => v != null);
+      recent.map(fn).filter((v): v is number => v != null);
 
     return {
       reach:   median(nums(r => r.reach)),
