@@ -56,15 +56,17 @@ function sortValue(r: PostCardRow, key: SortKey): number {
 // si todos los posts andan bien, la mayoría queda en gris.
 type BmLevel = "top" | "typical" | "low";
 
-function avg(values: number[]): number {
+function median(values: number[]): number {
   if (!values.length) return 0;
-  return values.reduce((s, v) => s + v, 0) / values.length;
+  const s = [...values].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m];
 }
 
 // invert=true: menor es mejor (ej. skip rate)
-function bm(value: number | null, mean: number, invert = false): BmLevel | undefined {
-  if (value == null || mean === 0) return undefined;
-  const ratio = value / mean;
+function bm(value: number | null, med: number, invert = false): BmLevel | undefined {
+  if (value == null || med === 0) return undefined;
+  const ratio = value / med;
   if (invert) return ratio <= 0.7 ? "top" : ratio >= 1.3 ? "low" : "typical";
   return ratio >= 1.3 ? "top" : ratio <= 0.7 ? "low" : "typical";
 }
@@ -231,14 +233,17 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
       rows.map(fn).filter((v): v is number => v != null);
 
     return {
-      reach:   avg(nums(r => r.reach)),
-      er:      avg(nums(r => er(r))),
-      sr:      avg(nums(r => rate(r.savedCount, r.reach))),
-      watch:   avg(nums(r => r.avgWatchTimeMs)),
-      play:    avg(nums(r => rate(r.plays, r.reach))),
-      skip:    avg(nums(r => r.skipRate)),
-      shares:  avg(nums(r => r.sharesCount)),
-      follows: avg(nums(r => r.followsCount)),
+      reach:   median(nums(r => r.reach)),
+      er:      median(nums(r => er(r))),
+      sr:      median(nums(r => rate(r.savedCount, r.reach))),
+      lr:      median(nums(r => rate(r.likeCount, r.reach))),
+      cr:      median(nums(r => rate(r.commentCount, r.reach))),
+      shr:     median(nums(r => rate(r.sharesCount, r.reach))),
+      watch:   median(nums(r => r.avgWatchTimeMs)),
+      play:    median(nums(r => rate(r.plays, r.reach))),
+      skip:    median(nums(r => r.skipRate)),
+      shares:  median(nums(r => r.sharesCount)),
+      follows: median(nums(r => r.followsCount)),
     };
   }, [rows]);
 
@@ -369,10 +374,13 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
                     benchmark={bd ? bm(srVal, bd.sr) : undefined}
                     tooltip="Guardados / alcance. La métrica más importante: si alguien guarda, Instagram impulsa masivamente el post." />
                   <Stat label="Like%" value={lrVal != null ? `${(lrVal * 100).toFixed(1)}%` : "—"}
+                    benchmark={bd ? bm(lrVal, bd.lr) : undefined}
                     tooltip="Likes divididos por alcance. De cada 100 personas que lo vieron, cuántas dieron like." />
                   <Stat label="Coment.%" value={crVal != null ? `${(crVal * 100).toFixed(2)}%` : "—"}
+                    benchmark={bd ? bm(crVal, bd.cr) : undefined}
                     tooltip="Comentarios divididos por alcance. Pequeño porcentaje pero muy valioso para el algoritmo." />
                   <Stat label="Share%" value={shrVal != null ? `${(shrVal * 100).toFixed(2)}%` : "—"}
+                    benchmark={bd ? bm(shrVal, bd.shr) : undefined}
                     tooltip="Compartidos divididos por alcance. Si es alto, el contenido tiene alto potencial de viralización." />
                 </div>
 
