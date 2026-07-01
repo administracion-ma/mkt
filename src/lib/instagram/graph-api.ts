@@ -252,8 +252,10 @@ export async function getMediaInsights(
     // insights permission might not cover this field
   }
 
-  const metricsList = ["impressions", "reach", "saved", "shares", "total_interactions"];
-  if (isVideo) metricsList.push("plays");
+  // impressions is only valid for IMAGE/CAROUSEL; VIDEO/REELS uses plays instead
+  const metricsList = isVideo
+    ? ["reach", "plays", "saved", "shares", "total_interactions"]
+    : ["impressions", "reach", "saved", "shares", "total_interactions"];
 
   try {
     const data = await graphGet<{
@@ -277,8 +279,8 @@ export async function getMediaInsights(
         case "total_interactions": result.totalInteractions = value; break;
       }
     }
-  } catch {
-    // insights may not be available for all media types or account tiers
+  } catch (err) {
+    console.error(`[insights] ${mediaId}:`, err instanceof Error ? err.message : err);
   }
 
   return result;

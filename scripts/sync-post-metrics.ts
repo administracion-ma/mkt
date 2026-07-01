@@ -61,7 +61,7 @@ async function main() {
       }
 
       console.log(
-        `   OK reach=${insights.reach ?? "?"} impresiones=${insights.impressions ?? "?"} likes=${insights.likeCount ?? "?"}`
+        `   OK reach=${insights.reach ?? "—"} plays=${insights.plays ?? "—"} impresiones=${insights.impressions ?? "—"} likes=${insights.likeCount ?? "—"} guardados=${insights.savedCount ?? "—"}`
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido";
