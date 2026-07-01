@@ -29,9 +29,10 @@ const TYPE_ICON: Record<string, string>  = { REELS: "▶", VIDEO: "▶", CAROUSE
 const TYPE_LABEL: Record<string, string> = { REELS: "Reel", VIDEO: "Video", CAROUSEL_ALBUM: "Carrusel", IMAGE: "Imagen" };
 const TYPE_COLOR: Record<string, string> = { REELS: "#f97316", VIDEO: "#3b82f6", CAROUSEL_ALBUM: "#a855f7", IMAGE: "#6b7280" };
 
-type SortKey = "date" | "reach" | "er" | "saves" | "shares" | "plays";
+type SortKey = "date" | "reach" | "er" | "saves" | "shares" | "plays" | "score";
 const SORT_LABELS: { key: SortKey; label: string }[] = [
   { key: "date",   label: "Fecha" },
+  { key: "score",  label: "Score" },
   { key: "reach",  label: "Alcance" },
   { key: "er",     label: "ER%" },
   { key: "saves",  label: "Guardados" },
@@ -39,15 +40,57 @@ const SORT_LABELS: { key: SortKey; label: string }[] = [
   { key: "plays",  label: "Vistas" },
 ];
 
-function sortValue(r: PostCardRow, key: SortKey): number {
+function sortValue(r: PostCardRow, key: SortKey, scoreMap?: Map<number, number>): number {
   switch (key) {
     case "date":   return r.publishedAt ? new Date(r.publishedAt).getTime() : 0;
+    case "score":  return scoreMap?.get(r.id) ?? -1;
     case "reach":  return r.reach ?? -1;
     case "er":     return er(r) ?? -1;
     case "saves":  return r.savedCount ?? -1;
     case "shares": return r.sharesCount ?? -1;
     case "plays":  return r.plays ?? -1;
   }
+}
+
+// ── Algorithm Score ───────────────────────────────────────────────────────────
+// Weighted composite based on 2026 Instagram signal hierarchy (Mosseri):
+// Shares (#1) > Saves (#2) > Comments (#3) > Watch retention (#4) > Likes (#5)
+// Score 0-100 vs last-10 median. Null if no reach data.
+function algoScore(
+  row: PostCardRow,
+  bd: { shr: number; sr: number; cr: number; lr: number; watch: number; skip: number } | null,
+  video: boolean
+): number | null {
+  if (!row.reach || !bd) return null;
+
+  const shrRate = rate(row.sharesCount, row.reach);
+  const svRate  = rate(row.savedCount, row.reach);
+  const cmtRate = rate(row.commentCount, row.reach);
+  const lkRate  = rate(row.likeCount, row.reach);
+
+  // Score metric 0-100 vs median: median = 50, 2x = 100, 0 = 0
+  const sc = (val: number | null, med: number, invert = false): number => {
+    if (val == null || med === 0) return 40; // neutral when no data
+    const r = invert ? med / Math.max(val, 0.001) : val / med;
+    return Math.min(100, Math.max(0, r * 50));
+  };
+
+  if (video) {
+    return Math.round(
+      sc(shrRate,  bd.shr)        * 0.28 +
+      sc(svRate,   bd.sr)         * 0.22 +
+      sc(cmtRate,  bd.cr)         * 0.15 +
+      sc(row.avgWatchTimeMs, bd.watch) * 0.20 +
+      sc(row.skipRate, bd.skip, true)  * 0.10 +
+      sc(lkRate,   bd.lr)         * 0.05
+    );
+  }
+  return Math.round(
+    sc(shrRate, bd.shr) * 0.35 +
+    sc(svRate,  bd.sr)  * 0.30 +
+    sc(cmtRate, bd.cr)  * 0.20 +
+    sc(lkRate,  bd.lr)  * 0.15
+  );
 }
 
 // ── Benchmark ────────────────────────────────────────────────────────────────
@@ -222,12 +265,7 @@ function Thumbnail({ row }: { row: PostCardRow }) {
 export function PostCards({ rows }: { rows: PostCardRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("date");
 
-  const sorted = useMemo(
-    () => [...rows].sort((a, b) => sortValue(b, sortKey) - sortValue(a, sortKey)),
-    [rows, sortKey]
-  );
-
-  // Benchmark siempre contra los últimos 10 posts (igual que Instagram Edits: "X de los 10 más recientes")
+  // Benchmark siempre contra los últimos 10 posts (igual que Instagram Edits)
   const benchmarkData = useMemo(() => {
     const recent = [...rows]
       .filter(r => r.publishedAt != null)
@@ -236,7 +274,6 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
     if (recent.length < 4) return null;
     const nums = (fn: (r: PostCardRow) => number | null) =>
       recent.map(fn).filter((v): v is number => v != null);
-
     return {
       reach:   median(nums(r => r.reach)),
       er:      median(nums(r => er(r))),
@@ -253,6 +290,21 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
   }, [rows]);
 
   const isVideo = (r: PostCardRow) => r.mediaType === "REELS" || r.mediaType === "VIDEO";
+
+  // Pre-compute scores for all rows (needed for sort)
+  const scoreMap = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const r of rows) {
+      const s = algoScore(r, benchmarkData, isVideo(r));
+      if (s != null) m.set(r.id, s);
+    }
+    return m;
+  }, [rows, benchmarkData]);
+
+  const sorted = useMemo(
+    () => [...rows].sort((a, b) => sortValue(b, sortKey, scoreMap) - sortValue(a, sortKey, scoreMap)),
+    [rows, sortKey, scoreMap]
+  );
 
   return (
     <div>
@@ -284,6 +336,8 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
           const color  = TYPE_COLOR[row.mediaType] ?? "#6b7280";
           const erGood = erVal != null && erVal >= 0.05;
           const bd     = benchmarkData;
+          const score  = scoreMap.get(row.id) ?? null;
+          const isViral = bd && row.reach != null && row.reach >= bd.reach * 2.5;
 
           return (
             <div key={row.id} style={{
@@ -296,7 +350,7 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
                 {/* Header */}
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.3rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.3rem", flexWrap: "wrap" }}>
                       <span style={{ fontSize: "0.68rem", fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.06em", background: `${color}18`, padding: "0.15rem 0.5rem", borderRadius: 20 }}>
                         {TYPE_LABEL[row.mediaType] ?? row.mediaType}
                       </span>
@@ -305,6 +359,22 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
                           ? new Date(row.publishedAt).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })
                           : "—"}
                       </span>
+                      {isViral && (
+                        <span style={{ fontSize: "0.65rem", fontWeight: 700, background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.4)", padding: "0.1rem 0.5rem", borderRadius: 20 }}>
+                          VIRAL
+                        </span>
+                      )}
+                      {score != null && (
+                        <span title="Score de algoritmo: pesa share%, save%, comment%, watch time y like% según su importancia para el algoritmo de Instagram 2026"
+                          style={{
+                            fontSize: "0.65rem", fontWeight: 700, padding: "0.1rem 0.5rem", borderRadius: 20,
+                            background: score >= 70 ? "rgba(34,197,94,0.12)" : score >= 45 ? "rgba(107,114,128,0.12)" : "rgba(239,68,68,0.10)",
+                            color: score >= 70 ? "#22c55e" : score >= 45 ? "#6b7280" : "#ef4444",
+                            border: `1px solid ${score >= 70 ? "rgba(34,197,94,0.3)" : score >= 45 ? "rgba(107,114,128,0.25)" : "rgba(239,68,68,0.25)"}`,
+                          }}>
+                          Score {score}
+                        </span>
+                      )}
                     </div>
                     <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                       {row.caption || <span style={{ color: "var(--text-tertiary)", fontStyle: "italic" }}>Sin caption</span>}
@@ -373,20 +443,20 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
                   )}
                 </div>
 
-                {/* Fila 2: tasas calculadas (%) */}
+                {/* Fila 2: tasas por señal de algoritmo — ordenadas por peso 2026 */}
                 <div style={{ display: "flex", gap: "0.15rem", flexWrap: "wrap", alignItems: "flex-start", paddingTop: "0.3rem", borderTop: "1px dashed rgba(255,255,255,0.06)" }}>
-                  <Stat label="Guard.%" value={srVal != null ? `${(srVal * 100).toFixed(2)}%` : "—"}
-                    benchmark={bd ? bm(srVal, bd.sr) : undefined}
-                    tooltip="Guardados / alcance. La métrica más importante: si alguien guarda, Instagram impulsa masivamente el post." />
-                  <Stat label="Like%" value={lrVal != null ? `${(lrVal * 100).toFixed(1)}%` : "—"}
-                    benchmark={bd ? bm(lrVal, bd.lr) : undefined}
-                    tooltip="Likes divididos por alcance. De cada 100 personas que lo vieron, cuántas dieron like." />
-                  <Stat label="Coment.%" value={crVal != null ? `${(crVal * 100).toFixed(2)}%` : "—"}
-                    benchmark={bd ? bm(crVal, bd.cr) : undefined}
-                    tooltip="Comentarios divididos por alcance. Pequeño porcentaje pero muy valioso para el algoritmo." />
                   <Stat label="Share%" value={shrVal != null ? `${(shrVal * 100).toFixed(2)}%` : "—"}
                     benchmark={bd ? bm(shrVal, bd.shr) : undefined}
-                    tooltip="Compartidos divididos por alcance. Si es alto, el contenido tiene alto potencial de viralización." />
+                    tooltip="Señal #1 del algoritmo en 2026 (Adam Mosseri). Compartidos por alcance: cada share lleva tu contenido a personas nuevas." />
+                  <Stat label="Guard.%" value={srVal != null ? `${(srVal * 100).toFixed(2)}%` : "—"}
+                    benchmark={bd ? bm(srVal, bd.sr) : undefined}
+                    tooltip="Señal #2 del algoritmo. Guardados / alcance: si alguien guarda, Instagram impulsa masivamente el post." />
+                  <Stat label="Coment.%" value={crVal != null ? `${(crVal * 100).toFixed(2)}%` : "—"}
+                    benchmark={bd ? bm(crVal, bd.cr) : undefined}
+                    tooltip="Señal #3. Comentarios / alcance. Pequeño porcentaje pero muy valioso — más peso que los likes." />
+                  <Stat label="Like%" value={lrVal != null ? `${(lrVal * 100).toFixed(1)}%` : "—"}
+                    benchmark={bd ? bm(lrVal, bd.lr) : undefined}
+                    tooltip="Señal #4. Likes / alcance. La interacción más básica, la menos valorada por el algoritmo hoy." />
                 </div>
 
                 {/* Follower bar + retention curve */}
