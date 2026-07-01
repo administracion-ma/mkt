@@ -64,7 +64,7 @@ async function main() {
         ),
       });
 
-      const save = async (data: typeof metricsData) => {
+      const save = async (data: Partial<typeof metricsData> & { capturedAt: Date }) => {
         if (existingToday) {
           await db.update(postMetrics).set(data).where(eq(postMetrics.id, existingToday.id));
         } else {
