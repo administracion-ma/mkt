@@ -101,9 +101,9 @@ export default async function AnalyticsPage({
 
   const hasMetrics = filteredMetrics.length > 0;
   const totalReach = filteredMetrics.reduce((s, m) => s + (m.reach ?? 0), 0);
-  const totalImpressions = filteredMetrics.reduce((s, m) => s + (m.impressions ?? 0), 0);
   const totalLikes = filteredMetrics.reduce((s, m) => s + (m.likeCount ?? 0), 0);
   const totalSaved = filteredMetrics.reduce((s, m) => s + (m.savedCount ?? 0), 0);
+  const totalShares = filteredMetrics.reduce((s, m) => s + (m.sharesCount ?? 0), 0);
 
   const periodLabel =
     from && to
@@ -176,14 +176,14 @@ export default async function AnalyticsPage({
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Impresiones</div>
-          <div className="stat-value">{hasMetrics ? fmt(totalImpressions) : "—"}</div>
-        </div>
-        <div className="stat-card">
           <div className="stat-label">Likes · Guardados</div>
           <div className="stat-value">
             {hasMetrics ? `${fmt(totalLikes)} · ${fmt(totalSaved)}` : "—"}
           </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Compartidos</div>
+          <div className="stat-value">{hasMetrics ? fmt(totalShares) : "—"}</div>
         </div>
       </div>
 

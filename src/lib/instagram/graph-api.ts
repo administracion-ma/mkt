@@ -258,14 +258,13 @@ export async function getMediaInsights(
     // insights permission might not cover this field
   }
 
-  // impressions not supported for VIDEO/REELS; reels have extra engagement metrics
   const metricsList =
     mediaType === "REELS"
       ? ["reach", "saved", "shares", "total_interactions", "views",
          "ig_reels_avg_watch_time", "reels_skip_rate"]
       : mediaType === "VIDEO"
       ? ["reach", "saved", "shares", "total_interactions", "views"]
-      : ["impressions", "reach", "saved", "shares", "total_interactions"];
+      : ["reach", "saved", "shares", "total_interactions"];
 
   try {
     const data = await graphGet<{
@@ -281,7 +280,6 @@ export async function getMediaInsights(
         typeof item.value === "number" ? item.value : item.values?.[0]?.value;
       if (value === undefined) continue;
       switch (item.name) {
-        case "impressions":              result.impressions = value; break;
         case "reach":                    result.reach = value; break;
         case "saved":                    result.savedCount = value; break;
         case "shares":                   result.sharesCount = value; break;
@@ -289,12 +287,31 @@ export async function getMediaInsights(
         case "total_interactions":       result.totalInteractions = value; break;
         case "ig_reels_avg_watch_time":  result.avgWatchTimeMs = value; break;
         case "reels_skip_rate":          result.skipRate = value; break;
-        case "follows":                  result.followsCount = value; break;
-        case "profile_visits":           result.profileVisits = value; break;
       }
     }
   } catch (err) {
     console.error(`[insights] ${mediaId}:`, err instanceof Error ? err.message : err);
+  }
+
+  if (mediaType === "REELS") {
+    try {
+      const extra = await graphGet<{
+        data: Array<{ name: string; values?: Array<{ value: number }>; value?: number }>;
+      }>(`/${mediaId}/insights`, {
+        metric: "follows,profile_visits",
+        period: "lifetime",
+        access_token: accessToken,
+      });
+      for (const item of extra.data) {
+        const value =
+          typeof item.value === "number" ? item.value : item.values?.[0]?.value;
+        if (value === undefined) continue;
+        if (item.name === "follows")        result.followsCount = value;
+        if (item.name === "profile_visits") result.profileVisits = value;
+      }
+    } catch {
+      // not available for this reel
+    }
   }
 
   return result;
