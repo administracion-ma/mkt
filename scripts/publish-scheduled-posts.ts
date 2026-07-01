@@ -37,7 +37,7 @@ async function main() {
         accessToken: account.accessToken,
         mediaUrl: post.mediaUrl,
         caption: post.caption,
-        mediaType: post.mediaType,
+        mediaType: post.mediaType as "IMAGE" | "VIDEO" | "REELS",
       });
 
       await db

@@ -8,7 +8,7 @@ import {
   pgEnum,
 } from "drizzle-orm/pg-core";
 
-export const mediaTypeEnum = pgEnum("media_type", ["IMAGE", "VIDEO", "REELS"]);
+export const mediaTypeEnum = pgEnum("media_type", ["IMAGE", "VIDEO", "REELS", "CAROUSEL_ALBUM"]);
 export const postStatusEnum = pgEnum("post_status", [
   "DRAFT",
   "SCHEDULED",

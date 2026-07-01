@@ -4,43 +4,15 @@ import { posts, postMetrics } from "@/db/schema";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
 import { getAccountSummary } from "@/lib/instagram/graph-api";
 import { PeriodFilter } from "@/components/PeriodFilter";
+import { AnalyticsTable, type PostRow } from "@/components/AnalyticsTable";
 
 export const dynamic = "force-dynamic";
-
-const MEDIA_TYPE_BADGE: Record<string, string> = {
-  IMAGE: "badge-image",
-  VIDEO: "badge-video",
-  REELS: "badge-reel",
-  CAROUSEL_ALBUM: "badge-image",
-};
-const MEDIA_TYPE_LABEL: Record<string, string> = {
-  IMAGE: "Imagen",
-  VIDEO: "Video",
-  REELS: "Reel",
-  CAROUSEL_ALBUM: "Carrusel",
-};
 
 function fmt(n: number | null | undefined): string {
   if (n == null) return "—";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
-}
-
-function fmtPct(n: number | null | undefined): string {
-  if (n == null) return "—";
-  return `${(n * 100).toFixed(1)}%`;
-}
-
-function fmtSec(ms: number | null | undefined): string {
-  if (ms == null) return "—";
-  const s = ms / 1000;
-  return s >= 60 ? `${Math.floor(s / 60)}m${Math.round(s % 60)}s` : `${s.toFixed(1)}s`;
-}
-
-function hookRate(plays: number | null | undefined, reach: number | null | undefined): string {
-  if (!plays || !reach) return "—";
-  return `${((plays / reach) * 100).toFixed(1)}%`;
 }
 
 export default async function AnalyticsPage({
@@ -96,16 +68,55 @@ export default async function AnalyticsPage({
     if (!latestMetrics.has(m.postId)) latestMetrics.set(m.postId, m);
   }
 
-  // Totals only for filtered posts
-  const filteredMetrics = publishedPosts
-    .map((p) => latestMetrics.get(p.id))
-    .filter(Boolean) as typeof allMetrics;
+  // Build rows for the table (serializable for client component)
+  const rows: PostRow[] = publishedPosts.map((p) => {
+    const m = latestMetrics.get(p.id);
+    return {
+      id: p.id,
+      publishedAt: p.publishedAt ? p.publishedAt.toISOString() : null,
+      mediaType: p.mediaType,
+      caption: p.caption ?? null,
+      igPermalink: p.igPermalink ?? null,
+      reach: m?.reach ?? null,
+      plays: m?.plays ?? null,
+      likeCount: m?.likeCount ?? null,
+      commentCount: m?.commentCount ?? null,
+      savedCount: m?.savedCount ?? null,
+      sharesCount: m?.sharesCount ?? null,
+      avgWatchTimeMs: m?.avgWatchTimeMs ?? null,
+      skipRate: m?.skipRate ?? null,
+      followsCount: m?.followsCount ?? null,
+      profileVisits: m?.profileVisits ?? null,
+    };
+  });
 
-  const hasMetrics = filteredMetrics.length > 0;
-  const totalReach = filteredMetrics.reduce((s, m) => s + (m.reach ?? 0), 0);
-  const totalLikes = filteredMetrics.reduce((s, m) => s + (m.likeCount ?? 0), 0);
-  const totalSaved = filteredMetrics.reduce((s, m) => s + (m.savedCount ?? 0), 0);
-  const totalShares = filteredMetrics.reduce((s, m) => s + (m.sharesCount ?? 0), 0);
+  // Summary stats
+  const withMetrics = rows.filter((r) => r.reach != null && r.reach > 0);
+  const hasMetrics = withMetrics.length > 0;
+
+  const totalReach = withMetrics.reduce((s, r) => s + (r.reach ?? 0), 0);
+  const avgReach = hasMetrics ? Math.round(totalReach / withMetrics.length) : null;
+
+  const erValues = withMetrics
+    .map((r) => {
+      if (!r.reach) return null;
+      const interactions = (r.likeCount ?? 0) + (r.commentCount ?? 0) + (r.savedCount ?? 0) + (r.sharesCount ?? 0);
+      return interactions / r.reach;
+    })
+    .filter((v): v is number => v !== null);
+  const avgER = erValues.length > 0 ? erValues.reduce((s, v) => s + v, 0) / erValues.length : null;
+
+  const totalShares = withMetrics.reduce((s, r) => s + (r.sharesCount ?? 0), 0);
+  const totalSaved = withMetrics.reduce((s, r) => s + (r.savedCount ?? 0), 0);
+
+  const bestPost = withMetrics.length > 0
+    ? withMetrics.reduce((best, r) => {
+        if (!r.reach) return best;
+        const erR = ((r.likeCount ?? 0) + (r.commentCount ?? 0) + (r.savedCount ?? 0) + (r.sharesCount ?? 0)) / r.reach;
+        const erB = best.reach ? ((best.likeCount ?? 0) + (best.commentCount ?? 0) + (best.savedCount ?? 0) + (best.sharesCount ?? 0)) / best.reach : 0;
+        return erR > erB ? r : best;
+      })
+    : null;
 
   const periodLabel =
     from && to
@@ -114,7 +125,6 @@ export default async function AnalyticsPage({
 
   return (
     <main className="page">
-      {/* Header */}
       <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
         <div>
           <h1 className="page-title">Analítica</h1>
@@ -122,7 +132,6 @@ export default async function AnalyticsPage({
         </div>
       </div>
 
-      {/* Period filter */}
       <div style={{ marginBottom: "1.5rem" }}>
         <PeriodFilter />
       </div>
@@ -166,123 +175,63 @@ export default async function AnalyticsPage({
       </div>
 
       {/* Stats grid */}
-      <div className="stats-grid">
+      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
         <div className="stat-card">
           <div className="stat-label">Posts en período</div>
           <div className="stat-value">{publishedPosts.length}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Alcance total</div>
-          <div className={`stat-value${hasMetrics && totalReach > 0 ? " accent" : ""}`}>
-            {hasMetrics ? fmt(totalReach) : "—"}
+          <div className="stat-label">Alcance promedio</div>
+          <div className={`stat-value${avgReach ? " accent" : ""}`}>
+            {fmt(avgReach)}
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Likes · Guardados</div>
+          <div className="stat-label">ER% promedio</div>
+          <div className={`stat-value${avgER != null && avgER >= 0.05 ? " accent" : ""}`}>
+            {avgER != null ? `${(avgER * 100).toFixed(2)}%` : "—"}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Guardados · Shares</div>
           <div className="stat-value">
-            {hasMetrics ? `${fmt(totalLikes)} · ${fmt(totalSaved)}` : "—"}
+            {hasMetrics ? `${fmt(totalSaved)} · ${fmt(totalShares)}` : "—"}
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-label">Compartidos</div>
-          <div className="stat-value">{hasMetrics ? fmt(totalShares) : "—"}</div>
-        </div>
+        {bestPost && bestPost.reach && (
+          <div className="stat-card" style={{ gridColumn: "span 1" }}>
+            <div className="stat-label">Mejor post (ER%)</div>
+            <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--accent)", marginBottom: "0.15rem" }}>
+              {(() => {
+                const interactions = (bestPost.likeCount ?? 0) + (bestPost.commentCount ?? 0) + (bestPost.savedCount ?? 0) + (bestPost.sharesCount ?? 0);
+                return `${((interactions / bestPost.reach!) * 100).toFixed(1)}%`;
+              })()}
+            </div>
+            <div style={{ fontSize: "0.7rem", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+              {bestPost.caption?.slice(0, 60) ?? "Sin caption"}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Posts table */}
       <div className="card">
         <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "1.25rem", color: "var(--text-secondary)" }}>
           {publishedPosts.length} post{publishedPosts.length !== 1 ? "s" : ""} · {periodLabel}
+          <span style={{ fontWeight: 400, marginLeft: "0.75rem", opacity: 0.6 }}>Hacé click en cualquier columna para ordenar</span>
         </h2>
 
-        {publishedPosts.length === 0 ? (
+        {rows.length === 0 ? (
           <div className="empty">
             <div className="empty-icon">📊</div>
             <p>
               {from || to
                 ? "No hay posts en el período seleccionado."
-                : "No hay posts publicados todavía. Importá el historial de Instagram desde GitHub Actions."}
+                : "No hay posts publicados todavía."}
             </p>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Tipo</th>
-                  <th>Caption</th>
-                  <th style={{ textAlign: "right" }}>Alcance</th>
-                  <th style={{ textAlign: "right" }}>Views</th>
-                  <th style={{ textAlign: "right" }}>Hook%</th>
-                  <th style={{ textAlign: "right" }}>Avg Watch</th>
-                  <th style={{ textAlign: "right" }}>Skip%</th>
-                  <th style={{ textAlign: "right" }}>Likes</th>
-                  <th style={{ textAlign: "right" }}>Coment.</th>
-                  <th style={{ textAlign: "right" }}>Guard.</th>
-                  <th style={{ textAlign: "right" }}>Shares</th>
-                  <th style={{ textAlign: "right" }}>+Seg.</th>
-                  <th style={{ textAlign: "right" }}>Visitas</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {publishedPosts.map((post) => {
-                  const m = latestMetrics.get(post.id);
-                  const isReel = post.mediaType === "REELS";
-                  const isVideo = post.mediaType === "VIDEO" || post.mediaType === "REELS";
-                  const isCarousel = post.mediaType === "CAROUSEL_ALBUM";
-                  return (
-                    <tr key={post.id}>
-                      <td className="muted" style={{ whiteSpace: "nowrap", fontSize: "0.775rem" }}>
-                        {post.publishedAt
-                          ? new Date(post.publishedAt).toLocaleDateString("es-AR", {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })
-                          : "—"}
-                      </td>
-                      <td>
-                        <span className={`badge ${MEDIA_TYPE_BADGE[post.mediaType]}`}>
-                          {MEDIA_TYPE_LABEL[post.mediaType]}
-                        </span>
-                      </td>
-                      <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)", fontSize: "0.8rem" }}>
-                        {post.caption || <span style={{ color: "var(--text-tertiary)" }}>Sin caption</span>}
-                      </td>
-                      <td className="num" style={{ color: m?.reach ? "var(--accent)" : "var(--text-tertiary)", fontWeight: m?.reach ? 600 : 400 }}>
-                        {fmt(m?.reach)}
-                      </td>
-                      <td className="num muted">{fmt(m?.plays)}</td>
-                      <td className="num" style={{ color: "var(--text-secondary)", fontSize: "0.78rem" }}>
-                        {isVideo ? hookRate(m?.plays, m?.reach) : "—"}
-                      </td>
-                      <td className="num muted" style={{ fontSize: "0.78rem" }}>
-                        {isVideo ? fmtSec(m?.avgWatchTimeMs) : "—"}
-                      </td>
-                      <td className="num muted" style={{ fontSize: "0.78rem" }}>
-                        {isVideo ? fmtPct(m?.skipRate) : "—"}
-                      </td>
-                      <td className="num muted">{fmt(m?.likeCount)}</td>
-                      <td className="num muted">{fmt(m?.commentCount)}</td>
-                      <td className="num muted">{fmt(m?.savedCount)}</td>
-                      <td className="num muted">{fmt(m?.sharesCount)}</td>
-                      <td className="num muted">{fmt(m?.followsCount)}</td>
-                      <td className="num muted">{fmt(m?.profileVisits)}</td>
-                      <td>
-                        {post.igPermalink && (
-                          <a href={post.igPermalink} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", fontSize: "0.75rem", whiteSpace: "nowrap" }}>
-                            Ver →
-                          </a>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <AnalyticsTable rows={rows} />
         )}
       </div>
     </main>
