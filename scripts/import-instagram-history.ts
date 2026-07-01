@@ -4,11 +4,11 @@ import { posts, pillars } from "../src/db/schema";
 import { getConnectedAccount } from "../src/lib/instagram/account-store";
 import { getAllInstagramMedia } from "../src/lib/instagram/graph-api";
 
-const MEDIA_TYPE_MAP: Record<string, "IMAGE" | "VIDEO" | "REELS"> = {
+const MEDIA_TYPE_MAP: Record<string, "IMAGE" | "VIDEO" | "REELS" | "CAROUSEL_ALBUM"> = {
   IMAGE: "IMAGE",
   VIDEO: "VIDEO",
   REELS: "REELS",
-  CAROUSEL_ALBUM: "IMAGE",
+  CAROUSEL_ALBUM: "CAROUSEL_ALBUM",
 };
 
 async function main() {
@@ -55,6 +55,7 @@ async function main() {
       caption: media.caption ?? "",
       mediaType,
       mediaUrl: media.mediaUrl ?? media.permalink,
+      videoDurationMs: media.videoDurationMs ?? null,
       scheduledAt: publishedAt,
       status: "PUBLISHED",
       igMediaId: media.id,

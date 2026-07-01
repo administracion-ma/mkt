@@ -14,10 +14,14 @@ export type PostRow = {
   commentCount: number | null;
   savedCount: number | null;
   sharesCount: number | null;
+  repostsCount: number | null;
   avgWatchTimeMs: number | null;
   skipRate: number | null;
   followsCount: number | null;
   profileVisits: number | null;
+  followersReach: number | null;
+  nonFollowersReach: number | null;
+  videoDurationMs: number | null;
 };
 
 const BADGE: Record<string, string> = {

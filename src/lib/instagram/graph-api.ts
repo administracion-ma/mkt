@@ -48,6 +48,7 @@ export interface IgRecentMedia {
   permalink: string;
   timestamp: string;
   mediaUrl?: string;
+  videoDurationMs?: number;
 }
 
 export async function getRecentMedia(
@@ -86,7 +87,7 @@ export async function getAllInstagramMedia(
 
   while (true) {
     const params: Record<string, string> = {
-      fields: "id,caption,media_type,permalink,timestamp,media_url,thumbnail_url",
+      fields: "id,caption,media_type,permalink,timestamp,media_url,thumbnail_url,duration",
       limit: "50",
       access_token: accessToken,
     };
@@ -101,6 +102,7 @@ export async function getAllInstagramMedia(
         timestamp: string;
         media_url?: string;
         thumbnail_url?: string;
+        duration?: number;
       }>;
       paging?: { cursors?: { after?: string }; next?: string };
     }>(`/${igUserId}/media`, params);
@@ -113,6 +115,7 @@ export async function getAllInstagramMedia(
         permalink: item.permalink,
         timestamp: item.timestamp,
         mediaUrl: item.media_url ?? item.thumbnail_url ?? item.permalink,
+        videoDurationMs: item.duration != null ? Math.round(item.duration * 1000) : undefined,
       });
     }
 
@@ -229,12 +232,15 @@ export interface MediaInsights {
   commentCount?: number;
   savedCount?: number;
   sharesCount?: number;
+  repostsCount?: number;
   plays?: number;
   totalInteractions?: number;
   avgWatchTimeMs?: number;
   skipRate?: number;
   followsCount?: number;
   profileVisits?: number;
+  followersReach?: number;
+  nonFollowersReach?: number;
 }
 
 export type MediaType = "IMAGE" | "VIDEO" | "REELS" | "CAROUSEL_ALBUM";
@@ -260,10 +266,10 @@ export async function getMediaInsights(
 
   const metricsList =
     mediaType === "REELS"
-      ? ["reach", "saved", "shares", "total_interactions", "views",
+      ? ["reach", "saved", "shares", "reposts", "total_interactions", "views",
          "ig_reels_avg_watch_time", "reels_skip_rate"]
       : mediaType === "VIDEO"
-      ? ["reach", "saved", "shares", "total_interactions", "views"]
+      ? ["reach", "saved", "shares", "reposts", "total_interactions", "views"]
       : ["reach", "saved", "shares", "total_interactions"]; // IMAGE, CAROUSEL_ALBUM
 
   try {
@@ -283,6 +289,7 @@ export async function getMediaInsights(
         case "reach":                    result.reach = value; break;
         case "saved":                    result.savedCount = value; break;
         case "shares":                   result.sharesCount = value; break;
+        case "reposts":                  result.repostsCount = value; break;
         case "views":                    result.plays = value; break;
         case "total_interactions":       result.totalInteractions = value; break;
         case "ig_reels_avg_watch_time":  result.avgWatchTimeMs = value; break;
@@ -333,6 +340,35 @@ export async function getMediaInsights(
       }
     } catch (err) {
       console.error(`[follows/visits] ${mediaId}:`, err instanceof Error ? err.message : err);
+    }
+
+    // Follower vs non-follower reach breakdown
+    try {
+      const breakdown = await graphGet<{
+        data: Array<{
+          name: string;
+          breakdown?: {
+            dimension_keys: string[];
+            results: Array<{ dimension_values: string[]; value: number }>;
+          };
+        }>;
+      }>(`/${mediaId}/insights`, {
+        metric: "reach",
+        breakdown: "follower_type",
+        period: "lifetime",
+        access_token: accessToken,
+      });
+      for (const item of breakdown.data) {
+        if (item.name === "reach" && item.breakdown) {
+          for (const r of item.breakdown.results) {
+            const ftype = r.dimension_values[0];
+            if (ftype === "FOLLOWER")     result.followersReach    = r.value;
+            if (ftype === "NON_FOLLOWER") result.nonFollowersReach = r.value;
+          }
+        }
+      }
+    } catch {
+      // breakdown not supported for this media type
     }
   }
 

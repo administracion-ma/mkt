@@ -20,16 +20,12 @@ function er(r: PostCardRow): number | null {
   if (!r.reach) return null;
   return ((r.likeCount ?? 0) + (r.commentCount ?? 0) + (r.savedCount ?? 0) + (r.sharesCount ?? 0)) / r.reach;
 }
-function saveRate(r: PostCardRow): number | null {
-  if (!r.reach || r.savedCount == null) return null;
-  return r.savedCount / r.reach;
-}
-function playRate(r: PostCardRow): number | null {
-  if (!r.reach || r.plays == null) return null;
-  return r.plays / r.reach;
+function rate(num: number | null | undefined, denom: number | null | undefined): number | null {
+  if (!denom || num == null) return null;
+  return num / denom;
 }
 
-const TYPE_ICON: Record<string, string> = { REELS: "▶", VIDEO: "▶", CAROUSEL_ALBUM: "⊞", IMAGE: "◻" };
+const TYPE_ICON: Record<string, string>  = { REELS: "▶", VIDEO: "▶", CAROUSEL_ALBUM: "⊞", IMAGE: "◻" };
 const TYPE_LABEL: Record<string, string> = { REELS: "Reel", VIDEO: "Video", CAROUSEL_ALBUM: "Carrusel", IMAGE: "Imagen" };
 const TYPE_COLOR: Record<string, string> = { REELS: "#f97316", VIDEO: "#3b82f6", CAROUSEL_ALBUM: "#a855f7", IMAGE: "#6b7280" };
 
@@ -54,66 +50,40 @@ function sortValue(r: PostCardRow, key: SortKey): number {
   }
 }
 
+// ── Benchmark ────────────────────────────────────────────────────────────────
 type BmLevel = "top" | "typical" | "low";
 
 function pct(values: number[], p: number): number {
   if (!values.length) return 0;
   const s = [...values].sort((a, b) => a - b);
-  return s[Math.floor(s.length * p)] ?? s[s.length - 1];
+  return s[Math.min(Math.floor(s.length * p), s.length - 1)];
 }
-
 function bm(value: number | null, lo: number, hi: number, invert = false): BmLevel | undefined {
   if (value == null || lo === hi) return undefined;
   if (invert) return value <= lo ? "top" : value >= hi ? "low" : "typical";
   return value >= hi ? "top" : value <= lo ? "low" : "typical";
 }
+const BM_LABEL: Record<BmLevel, string> = { top: "Valor más alto", typical: "Valor típico", low: "Valor más bajo" };
+const BM_COLOR: Record<BmLevel, string> = { top: "#22c55e", typical: "#6b7280", low: "#ef4444" };
 
-const BM_LABEL: Record<BmLevel, string> = {
-  top:     "Valor más alto",
-  typical: "Valor típico",
-  low:     "Valor más bajo",
-};
-const BM_COLOR: Record<BmLevel, string> = {
-  top:     "#22c55e",
-  typical: "#6b7280",
-  low:     "#ef4444",
-};
-
-function Stat({
-  label, value, accent, tooltip, benchmark,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-  tooltip?: string;
-  benchmark?: BmLevel;
+// ── Stat chip ─────────────────────────────────────────────────────────────────
+function Stat({ label, value, accent, tooltip, benchmark }: {
+  label: string; value: string; accent?: boolean; tooltip?: string; benchmark?: BmLevel;
 }) {
   const [tip, setTip] = useState(false);
   return (
     <div
-      style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", minWidth: 60, cursor: "help" }}
+      style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", minWidth: 58, cursor: "help" }}
       onMouseEnter={() => setTip(true)}
       onMouseLeave={() => setTip(false)}
     >
       {tooltip && tip && (
         <div style={{
-          position: "absolute",
-          bottom: "calc(100% + 8px)",
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "#18181b",
-          color: "#e4e4e7",
-          fontSize: "0.72rem",
-          lineHeight: 1.5,
-          padding: "0.45rem 0.7rem",
-          borderRadius: 8,
-          border: "1px solid rgba(255,255,255,0.1)",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-          whiteSpace: "normal",
-          width: 210,
-          textAlign: "center",
-          zIndex: 50,
-          pointerEvents: "none",
+          position: "absolute", bottom: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)",
+          background: "#18181b", color: "#e4e4e7", fontSize: "0.72rem", lineHeight: 1.5,
+          padding: "0.45rem 0.7rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.4)", whiteSpace: "normal", width: 210,
+          textAlign: "center", zIndex: 50, pointerEvents: "none",
         }}>
           {tooltip}
         </div>
@@ -121,11 +91,11 @@ function Stat({
       <span style={{ fontWeight: 700, fontSize: "1.05rem", color: accent ? "var(--accent)" : "var(--text-primary)", letterSpacing: "-0.02em" }}>
         {value}
       </span>
-      <span style={{ fontSize: "0.6rem", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 1 }}>
+      <span style={{ fontSize: "0.59rem", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 1 }}>
         {label}
       </span>
       {benchmark && (
-        <span style={{ fontSize: "0.58rem", color: BM_COLOR[benchmark], fontWeight: 700, marginTop: 2, letterSpacing: "0.02em" }}>
+        <span style={{ fontSize: "0.57rem", color: BM_COLOR[benchmark], fontWeight: 700, marginTop: 2 }}>
           {BM_LABEL[benchmark]}
         </span>
       )}
@@ -133,24 +103,96 @@ function Stat({
   );
 }
 
-function Divider() {
+function Div() {
   return <div style={{ width: 1, background: "var(--border)", alignSelf: "stretch", margin: "0 0.4rem" }} />;
 }
 
+// ── Retention curve (estimated from avgWatchTime + duration) ─────────────────
+function RetentionCurve({ avgWatchMs, durationMs }: { avgWatchMs: number; durationMs: number }) {
+  const A = avgWatchMs / 1000;
+  const D = durationMs / 1000;
+  if (D <= 0 || A <= 0) return null;
+  const n = Math.max(0.3, D / A - 1);
+  const W = 260, H = 56;
+  const pts: string[] = [];
+  for (let i = 0; i <= 60; i++) {
+    const t = (i / 60) * D;
+    const retention = 100 * Math.pow(Math.max(0, 1 - t / D), n);
+    pts.push(`${i === 0 ? "M" : "L"}${((t / D) * W).toFixed(1)},${(H - (retention / 100) * H).toFixed(1)}`);
+  }
+  const avgX = (A / D) * W;
+  const avgRetention = 100 * Math.pow(Math.max(0, 1 - A / D), n);
+  const avgY = H - (avgRetention / 100) * H;
+
+  return (
+    <div style={{ marginTop: "0.5rem" }}>
+      <div style={{ fontSize: "0.62rem", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
+        Curva de retención estimada
+      </div>
+      <div style={{ position: "relative", display: "inline-block" }}>
+        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: "block", overflow: "visible" }}>
+          {/* grid lines */}
+          {[0, 50, 100].map(p => (
+            <line key={p} x1={0} y1={H - (p / 100) * H} x2={W} y2={H - (p / 100) * H}
+              stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+          ))}
+          {/* curve */}
+          <path d={pts.join(" ")} stroke="var(--accent)" strokeWidth={2} fill="none" strokeLinecap="round" />
+          {/* avg watch marker */}
+          <line x1={avgX} y1={0} x2={avgX} y2={H} stroke="rgba(249,115,22,0.35)" strokeDasharray="3,2" strokeWidth={1} />
+          <circle cx={avgX} cy={avgY} r={3} fill="var(--accent)" />
+        </svg>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.58rem", color: "var(--text-tertiary)", marginTop: 2 }}>
+          <span>0s</span>
+          <span style={{ color: "var(--accent)", fontWeight: 600 }}>avg {fmtSec(avgWatchMs)}</span>
+          <span>{fmtSec(durationMs)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Follower split bar ────────────────────────────────────────────────────────
+function FollowerBar({ followers, nonFollowers }: { followers: number; nonFollowers: number }) {
+  const total = followers + nonFollowers;
+  if (!total) return null;
+  const followerPct = (followers / total) * 100;
+  return (
+    <div style={{ marginTop: "0.5rem" }}>
+      <div style={{ fontSize: "0.62rem", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
+        Quién lo vio
+      </div>
+      <div style={{ height: 6, borderRadius: 3, background: "var(--border)", overflow: "hidden", width: "100%", maxWidth: 260 }}>
+        <div style={{ height: "100%", width: `${followerPct}%`, background: "var(--accent)", borderRadius: 3 }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.65rem", marginTop: 4, maxWidth: 260 }}>
+        <span>
+          <span style={{ color: "var(--accent)", fontWeight: 700 }}>{fmt(followers)}</span>
+          <span style={{ color: "var(--text-tertiary)" }}> seguidores ({followerPct.toFixed(0)}%)</span>
+        </span>
+        <span>
+          <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>{fmt(nonFollowers)}</span>
+          <span style={{ color: "var(--text-tertiary)" }}> nuevos</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Thumbnail ─────────────────────────────────────────────────────────────────
 function Thumbnail({ row }: { row: PostCardRow }) {
   const [failed, setFailed] = useState(false);
   const isVideo = row.mediaType === "REELS" || row.mediaType === "VIDEO";
 
   if (row.mediaUrl && !failed) {
     return (
-      <div style={{ position: "relative", width: 112, minWidth: 112, height: 150, borderRadius: 10, overflow: "hidden", background: "#111" }}>
-        {isVideo ? (
-          <video src={row.mediaUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            muted playsInline preload="metadata" onError={() => setFailed(true)} />
-        ) : (
-          <img src={row.mediaUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            onError={() => setFailed(true)} />
-        )}
+      <div style={{ position: "relative", width: 112, minWidth: 112, height: 152, borderRadius: 10, overflow: "hidden", background: "#111" }}>
+        {isVideo
+          ? <video src={row.mediaUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              muted playsInline preload="metadata" onError={() => setFailed(true)} />
+          : <img src={row.mediaUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              onError={() => setFailed(true)} />
+        }
         {isVideo && (
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
             <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.9rem" }}>▶</div>
@@ -162,13 +204,14 @@ function Thumbnail({ row }: { row: PostCardRow }) {
 
   const color = TYPE_COLOR[row.mediaType] ?? "#6b7280";
   return (
-    <div style={{ width: 112, minWidth: 112, height: 150, borderRadius: 10, background: `${color}18`, border: `1px solid ${color}30`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
+    <div style={{ width: 112, minWidth: 112, height: 152, borderRadius: 10, background: `${color}18`, border: `1px solid ${color}30`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
       <span style={{ fontSize: "1.8rem", color }}>{TYPE_ICON[row.mediaType] ?? "◻"}</span>
       <span style={{ fontSize: "0.65rem", color, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>{TYPE_LABEL[row.mediaType] ?? row.mediaType}</span>
     </div>
   );
 }
 
+// ── Main component ────────────────────────────────────────────────────────────
 export function PostCards({ rows }: { rows: PostCardRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("date");
 
@@ -177,30 +220,20 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
     [rows, sortKey]
   );
 
-  // Compute percentiles across all posts (need ≥4 posts for benchmarks to be meaningful)
   const benchmarkData = useMemo(() => {
     if (rows.length < 4) return null;
     const nums = (fn: (r: PostCardRow) => number | null) =>
       rows.map(fn).filter((v): v is number => v != null);
 
-    const reaches   = nums(r => r.reach);
-    const erVals    = nums(r => er(r));
-    const srVals    = nums(r => saveRate(r));
-    const watchVals = nums(r => r.avgWatchTimeMs);
-    const prVals    = nums(r => playRate(r));
-    const skipVals  = nums(r => r.skipRate);
-    const shareVals = nums(r => r.sharesCount);
-    const followVals= nums(r => r.followsCount);
-
     return {
-      reach:   { lo: pct(reaches, 0.25),   hi: pct(reaches, 0.75) },
-      er:      { lo: pct(erVals, 0.25),     hi: pct(erVals, 0.75) },
-      sr:      { lo: pct(srVals, 0.25),     hi: pct(srVals, 0.75) },
-      watch:   { lo: pct(watchVals, 0.25),  hi: pct(watchVals, 0.75) },
-      play:    { lo: pct(prVals, 0.25),     hi: pct(prVals, 0.75) },
-      skip:    { lo: pct(skipVals, 0.25),   hi: pct(skipVals, 0.75) },
-      shares:  { lo: pct(shareVals, 0.25),  hi: pct(shareVals, 0.75) },
-      follows: { lo: pct(followVals, 0.25), hi: pct(followVals, 0.75) },
+      reach:   { lo: pct(nums(r => r.reach), 0.25),              hi: pct(nums(r => r.reach), 0.75) },
+      er:      { lo: pct(nums(r => er(r)), 0.25),                hi: pct(nums(r => er(r)), 0.75) },
+      sr:      { lo: pct(nums(r => rate(r.savedCount, r.reach)), 0.25), hi: pct(nums(r => rate(r.savedCount, r.reach)), 0.75) },
+      watch:   { lo: pct(nums(r => r.avgWatchTimeMs), 0.25),     hi: pct(nums(r => r.avgWatchTimeMs), 0.75) },
+      play:    { lo: pct(nums(r => rate(r.plays, r.reach)), 0.25), hi: pct(nums(r => rate(r.plays, r.reach)), 0.75) },
+      skip:    { lo: pct(nums(r => r.skipRate), 0.25),           hi: pct(nums(r => r.skipRate), 0.75) },
+      shares:  { lo: pct(nums(r => r.sharesCount), 0.25),        hi: pct(nums(r => r.sharesCount), 0.75) },
+      follows: { lo: pct(nums(r => r.followsCount), 0.25),       hi: pct(nums(r => r.followsCount), 0.75) },
     };
   }, [rows]);
 
@@ -212,49 +245,36 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
         <span style={{ fontSize: "0.72rem", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Ordenar:</span>
         {SORT_LABELS.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setSortKey(key)}
-            style={{
-              padding: "0.25rem 0.75rem",
-              borderRadius: 20,
-              border: "1px solid",
-              borderColor: sortKey === key ? "var(--accent)" : "var(--border)",
-              background: sortKey === key ? "rgba(249,115,22,0.12)" : "transparent",
-              color: sortKey === key ? "var(--accent)" : "var(--text-secondary)",
-              fontSize: "0.75rem",
-              fontWeight: sortKey === key ? 700 : 400,
-              cursor: "pointer",
-            }}
-          >
+          <button key={key} onClick={() => setSortKey(key)} style={{
+            padding: "0.25rem 0.75rem", borderRadius: 20, border: "1px solid",
+            borderColor: sortKey === key ? "var(--accent)" : "var(--border)",
+            background: sortKey === key ? "rgba(249,115,22,0.12)" : "transparent",
+            color: sortKey === key ? "var(--accent)" : "var(--text-secondary)",
+            fontSize: "0.75rem", fontWeight: sortKey === key ? 700 : 400, cursor: "pointer",
+          }}>
             {label}
           </button>
         ))}
       </div>
 
-      {/* Cards */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
         {sorted.map((row) => {
           const erVal  = er(row);
-          const srVal  = saveRate(row);
-          const prVal  = playRate(row);
+          const srVal  = rate(row.savedCount, row.reach);
+          const prVal  = rate(row.plays, row.reach);
+          const lrVal  = rate(row.likeCount, row.reach);
+          const crVal  = rate(row.commentCount, row.reach);
+          const shrVal = rate(row.sharesCount, row.reach);
           const video  = isVideo(row);
           const color  = TYPE_COLOR[row.mediaType] ?? "#6b7280";
           const erGood = erVal != null && erVal >= 0.05;
           const bd     = benchmarkData;
 
           return (
-            <div
-              key={row.id}
-              style={{
-                display: "flex",
-                gap: "1.1rem",
-                background: "var(--card)",
-                border: "1px solid var(--border)",
-                borderRadius: 14,
-                padding: "1rem",
-              }}
-            >
+            <div key={row.id} style={{
+              display: "flex", gap: "1.1rem", background: "var(--card)",
+              border: "1px solid var(--border)", borderRadius: 14, padding: "1rem",
+            }}>
               <Thumbnail row={row} />
 
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.65rem" }}>
@@ -285,97 +305,83 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
 
                 <div style={{ height: 1, background: "var(--border)" }} />
 
-                {/* Stats */}
+                {/* Fila 1: métricas absolutas principales */}
                 <div style={{ display: "flex", gap: "0.15rem", flexWrap: "wrap", alignItems: "flex-start" }}>
-                  <Stat
-                    label="Alcance"
-                    value={fmt(row.reach)}
-                    accent={!!row.reach}
+                  <Stat label="Alcance" value={fmt(row.reach)} accent={!!row.reach}
                     benchmark={bd ? bm(row.reach, bd.reach.lo, bd.reach.hi) : undefined}
-                    tooltip="Personas únicas que vieron este post. Base para calcular todo lo demás."
-                  />
-                  <Divider />
-                  <Stat
-                    label="ER%"
-                    value={erVal != null ? `${(erVal * 100).toFixed(1)}%` : "—"}
-                    accent={erGood}
+                    tooltip="Personas únicas que vieron este post. Base para calcular todo lo demás." />
+                  <Div />
+                  <Stat label="ER%" value={erVal != null ? `${(erVal * 100).toFixed(1)}%` : "—"} accent={erGood}
                     benchmark={bd ? bm(erVal, bd.er.lo, bd.er.hi) : undefined}
-                    tooltip="Engagement Rate: de cada 100 personas que lo vieron, cuántas reaccionaron (likes + comentarios + guardados + compartidos). Arriba del 5% es muy bueno."
-                  />
-                  {video && <><Divider />
-                    <Stat
-                      label="Vistas"
-                      value={fmt(row.plays)}
-                      benchmark={bd ? bm(row.plays, bd.reach.lo, bd.reach.hi) : undefined}
-                      tooltip="Veces que se reprodujo el video. Puede superar el alcance si alguien lo ve más de una vez."
-                    />
-                    <Stat
-                      label="Play%"
-                      value={prVal != null ? `${(prVal * 100).toFixed(1)}%` : "—"}
-                      benchmark={bd ? bm(prVal, bd.play.lo, bd.play.hi) : undefined}
-                      tooltip="Reproducciones divididas por alcance. Más de 100% significa que la gente lo repitió. Cuanto más alto, más atrapó la atención."
-                    />
-                    <Stat
-                      label="Watch"
-                      value={fmtSec(row.avgWatchTimeMs)}
-                      benchmark={bd ? bm(row.avgWatchTimeMs, bd.watch.lo, bd.watch.hi) : undefined}
-                      tooltip="Tiempo promedio que cada persona vio el video. Cuanto más alto, mejor: Instagram premia los videos que retienen la atención."
-                    />
-                    {row.skipRate != null && (
-                      <Stat
-                        label="Skip%"
-                        value={`${row.skipRate.toFixed(1)}%`}
-                        benchmark={bd ? bm(row.skipRate, bd.skip.lo, bd.skip.hi, true) : undefined}
-                        tooltip="Porcentaje que saltó el video sin verlo. Menos es mejor. Si es alto, la miniatura o el primer segundo no enganchan."
-                      />
-                    )}
-                  </>}
-                  <Divider />
-                  <Stat
-                    label="Likes"
-                    value={fmt(row.likeCount)}
-                    tooltip="Cantidad de 'me gusta'. La interacción más básica."
-                  />
-                  <Stat
-                    label="Coment."
-                    value={fmt(row.commentCount)}
-                    tooltip="Cantidad de comentarios. El algoritmo los valora más que los likes porque requieren mayor esfuerzo."
-                  />
-                  <Stat
-                    label="Guard."
-                    value={fmt(row.savedCount)}
-                    tooltip="Veces que alguien guardó el post. Señal muy fuerte para el algoritmo de Instagram."
-                  />
-                  <Stat
-                    label="Guard.%"
-                    value={srVal != null ? `${(srVal * 100).toFixed(2)}%` : "—"}
-                    benchmark={bd ? bm(srVal, bd.sr.lo, bd.sr.hi) : undefined}
-                    tooltip="Guardados dividido por alcance. La métrica más importante: si alguien guarda, Instagram impulsa masivamente el post."
-                  />
-                  <Stat
-                    label="Shares"
-                    value={fmt(row.sharesCount)}
+                    tooltip="Engagement Rate: de cada 100 personas que lo vieron, cuántas reaccionaron (likes + comentarios + guardados + compartidos). Arriba del 5% es muy bueno." />
+                  {video && (
+                    <><Div />
+                      <Stat label="Vistas" value={fmt(row.plays)}
+                        tooltip="Total de reproducciones. Puede superar el alcance si alguien lo vio más de una vez." />
+                      <Stat label="Play%" value={prVal != null ? `${(prVal * 100).toFixed(1)}%` : "—"}
+                        benchmark={bd ? bm(prVal, bd.play.lo, bd.play.hi) : undefined}
+                        tooltip="Reproducciones divididas por alcance. Más de 100% = la gente lo repitió. Cuanto más alto, mejor." />
+                      <Stat label="Watch" value={fmtSec(row.avgWatchTimeMs)}
+                        benchmark={bd ? bm(row.avgWatchTimeMs, bd.watch.lo, bd.watch.hi) : undefined}
+                        tooltip="Tiempo promedio viendo el video antes de salir. Instagram premia los videos que retienen la atención." />
+                      {row.skipRate != null && (
+                        <Stat label="Skip%" value={`${row.skipRate.toFixed(1)}%`}
+                          benchmark={bd ? bm(row.skipRate, bd.skip.lo, bd.skip.hi, true) : undefined}
+                          tooltip="Porcentaje que saltó el video sin reproducirlo. Menos es mejor. Si es alto, la miniatura o el primer segundo no enganchan." />
+                      )}
+                    </>
+                  )}
+                  <Div />
+                  <Stat label="Guard." value={fmt(row.savedCount)}
+                    tooltip="Veces que alguien guardó el post. Señal más fuerte para el algoritmo." />
+                  <Stat label="Shares" value={fmt(row.sharesCount)}
                     benchmark={bd ? bm(row.sharesCount, bd.shares.lo, bd.shares.hi) : undefined}
-                    tooltip="Veces que compartieron el post por DM o en historias. Cada share lleva tu contenido a personas que no te siguen."
-                  />
+                    tooltip="Veces que compartieron por DM o historias. Cada share lleva tu contenido a personas que no te siguen." />
+                  <Stat label="Likes" value={fmt(row.likeCount)}
+                    tooltip="Cantidad de 'me gusta'. La interacción más básica." />
+                  <Stat label="Coment." value={fmt(row.commentCount)}
+                    tooltip="Cantidad de comentarios. El algoritmo los valora más que los likes." />
+                  {row.repostsCount != null && (
+                    <Stat label="Reposts" value={fmt(row.repostsCount)}
+                      tooltip="Veces que alguien reposteó este contenido." />
+                  )}
                   {row.followsCount != null && (
-                    <><Divider />
-                      <Stat
-                        label="+Seg."
-                        value={fmt(row.followsCount)}
+                    <><Div />
+                      <Stat label="+Seg." value={fmt(row.followsCount)}
                         benchmark={bd ? bm(row.followsCount, bd.follows.lo, bd.follows.hi) : undefined}
-                        tooltip="Personas que empezaron a seguirte después de ver este post. Qué contenido convierte visitantes en seguidores."
-                      />
+                        tooltip="Personas que empezaron a seguirte después de ver este post." />
                     </>
                   )}
                   {row.profileVisits != null && (
-                    <Stat
-                      label="Visitas"
-                      value={fmt(row.profileVisits)}
-                      tooltip="Personas que fueron a ver tu perfil después de ver este post."
-                    />
+                    <Stat label="Visitas" value={fmt(row.profileVisits)}
+                      tooltip="Personas que fueron a ver tu perfil después de ver este post." />
                   )}
                 </div>
+
+                {/* Fila 2: tasas calculadas (%) */}
+                <div style={{ display: "flex", gap: "0.15rem", flexWrap: "wrap", alignItems: "flex-start", paddingTop: "0.3rem", borderTop: "1px dashed rgba(255,255,255,0.06)" }}>
+                  <Stat label="Guard.%" value={srVal != null ? `${(srVal * 100).toFixed(2)}%` : "—"}
+                    benchmark={bd ? bm(srVal, bd.sr.lo, bd.sr.hi) : undefined}
+                    tooltip="Guardados / alcance. La métrica más importante: si alguien guarda, Instagram impulsa masivamente el post." />
+                  <Stat label="Like%" value={lrVal != null ? `${(lrVal * 100).toFixed(1)}%` : "—"}
+                    tooltip="Likes divididos por alcance. De cada 100 personas que lo vieron, cuántas dieron like." />
+                  <Stat label="Coment.%" value={crVal != null ? `${(crVal * 100).toFixed(2)}%` : "—"}
+                    tooltip="Comentarios divididos por alcance. Pequeño porcentaje pero muy valioso para el algoritmo." />
+                  <Stat label="Share%" value={shrVal != null ? `${(shrVal * 100).toFixed(2)}%` : "—"}
+                    tooltip="Compartidos divididos por alcance. Si es alto, el contenido tiene alto potencial de viralización." />
+                </div>
+
+                {/* Follower bar + retention curve */}
+                {(row.followersReach != null && row.nonFollowersReach != null) || (video && row.avgWatchTimeMs != null && row.videoDurationMs != null) ? (
+                  <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap", paddingTop: "0.2rem" }}>
+                    {row.followersReach != null && row.nonFollowersReach != null && (
+                      <FollowerBar followers={row.followersReach} nonFollowers={row.nonFollowersReach} />
+                    )}
+                    {video && row.avgWatchTimeMs != null && row.videoDurationMs != null && (
+                      <RetentionCurve avgWatchMs={row.avgWatchTimeMs} durationMs={row.videoDurationMs} />
+                    )}
+                  </div>
+                ) : null}
               </div>
             </div>
           );

@@ -44,12 +44,15 @@ async function main() {
         commentCount: insights.commentCount ?? null,
         savedCount: insights.savedCount ?? null,
         sharesCount: insights.sharesCount ?? null,
+        repostsCount: insights.repostsCount ?? null,
         plays: insights.plays ?? null,
         totalInteractions: insights.totalInteractions ?? null,
         avgWatchTimeMs: insights.avgWatchTimeMs ?? null,
         skipRate: insights.skipRate ?? null,
         followsCount: insights.followsCount ?? null,
         profileVisits: insights.profileVisits ?? null,
+        followersReach: insights.followersReach ?? null,
+        nonFollowersReach: insights.nonFollowersReach ?? null,
         capturedAt: new Date(),
       };
 
@@ -68,7 +71,7 @@ async function main() {
       }
 
       console.log(
-        `   OK reach=${insights.reach ?? "—"} views=${insights.plays ?? "—"} likes=${insights.likeCount ?? "—"} guard=${insights.savedCount ?? "—"} avgWatch=${insights.avgWatchTimeMs != null ? `${(insights.avgWatchTimeMs / 1000).toFixed(1)}s` : "—"} skip=${insights.skipRate != null ? `${(insights.skipRate * 100).toFixed(1)}%` : "—"}`
+        `   OK reach=${insights.reach ?? "—"} views=${insights.plays ?? "—"} likes=${insights.likeCount ?? "—"} guard=${insights.savedCount ?? "—"} reposts=${insights.repostsCount ?? "—"} seg=${insights.followersReach ?? "—"} noSeg=${insights.nonFollowersReach ?? "—"} avgWatch=${insights.avgWatchTimeMs != null ? `${(insights.avgWatchTimeMs / 1000).toFixed(1)}s` : "—"} skip=${insights.skipRate ?? "—"}%`
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido";

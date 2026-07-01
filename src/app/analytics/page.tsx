@@ -78,16 +78,20 @@ export default async function AnalyticsPage({
       caption: p.caption ?? null,
       igPermalink: p.igPermalink ?? null,
       mediaUrl: p.mediaUrl ?? null,
+      videoDurationMs: p.videoDurationMs ?? null,
       reach: m?.reach ?? null,
       plays: m?.plays ?? null,
       likeCount: m?.likeCount ?? null,
       commentCount: m?.commentCount ?? null,
       savedCount: m?.savedCount ?? null,
       sharesCount: m?.sharesCount ?? null,
+      repostsCount: m?.repostsCount ?? null,
       avgWatchTimeMs: m?.avgWatchTimeMs ?? null,
       skipRate: m?.skipRate ?? null,
       followsCount: m?.followsCount ?? null,
       profileVisits: m?.profileVisits ?? null,
+      followersReach: m?.followersReach ?? null,
+      nonFollowersReach: m?.nonFollowersReach ?? null,
     };
   });
 

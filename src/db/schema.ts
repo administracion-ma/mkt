@@ -39,6 +39,7 @@ export const posts = pgTable("posts", {
   caption: text("caption").notNull(),
   mediaType: mediaTypeEnum("media_type").notNull(),
   mediaUrl: text("media_url").notNull(),
+  videoDurationMs: integer("video_duration_ms"),
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
   status: postStatusEnum("status").notNull().default("DRAFT"),
   igMediaId: text("ig_media_id"),
@@ -59,6 +60,7 @@ export const postMetrics = pgTable("post_metrics", {
   commentCount: integer("comment_count"),
   savedCount: integer("saved_count"),
   sharesCount: integer("shares_count"),
+  repostsCount: integer("reposts_count"),
   videoViews: integer("video_views"),
   plays: integer("plays"),
   avgWatchTimeMs: integer("avg_watch_time_ms"),
@@ -67,6 +69,8 @@ export const postMetrics = pgTable("post_metrics", {
   totalInteractions: integer("total_interactions"),
   followsCount: integer("follows_count"),
   profileVisits: integer("profile_visits"),
+  followersReach: integer("followers_reach"),
+  nonFollowersReach: integer("non_followers_reach"),
 });
 
 export const analysisReports = pgTable("analysis_reports", {
