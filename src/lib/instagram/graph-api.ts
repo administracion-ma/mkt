@@ -47,6 +47,7 @@ export interface IgRecentMedia {
   mediaType: string;
   permalink: string;
   timestamp: string;
+  mediaUrl?: string;
 }
 
 export async function getRecentMedia(
@@ -74,6 +75,52 @@ export async function getRecentMedia(
     permalink: item.permalink,
     timestamp: item.timestamp,
   }));
+}
+
+export async function getAllInstagramMedia(
+  igUserId: string,
+  accessToken: string
+): Promise<IgRecentMedia[]> {
+  const allMedia: IgRecentMedia[] = [];
+  let after: string | undefined;
+
+  while (true) {
+    const params: Record<string, string> = {
+      fields: "id,caption,media_type,permalink,timestamp,media_url,thumbnail_url",
+      limit: "50",
+      access_token: accessToken,
+    };
+    if (after) params.after = after;
+
+    const data = await graphGet<{
+      data: Array<{
+        id: string;
+        caption?: string;
+        media_type: string;
+        permalink: string;
+        timestamp: string;
+        media_url?: string;
+        thumbnail_url?: string;
+      }>;
+      paging?: { cursors?: { after?: string }; next?: string };
+    }>(`/${igUserId}/media`, params);
+
+    for (const item of data.data) {
+      allMedia.push({
+        id: item.id,
+        caption: item.caption,
+        mediaType: item.media_type,
+        permalink: item.permalink,
+        timestamp: item.timestamp,
+        mediaUrl: item.media_url ?? item.thumbnail_url ?? item.permalink,
+      });
+    }
+
+    if (!data.paging?.next || !data.paging.cursors?.after) break;
+    after = data.paging.cursors.after;
+  }
+
+  return allMedia;
 }
 
 async function graphPost<T>(path: string, params: Record<string, string>): Promise<T> {

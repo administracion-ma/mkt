@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
 import { posts, postMetrics } from "@/db/schema";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
 import { getAccountSummary } from "@/lib/instagram/graph-api";
+import { PeriodFilter } from "@/components/PeriodFilter";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +20,17 @@ const MEDIA_TYPE_LABEL: Record<string, string> = {
 
 function fmt(n: number | null | undefined): string {
   if (n == null) return "—";
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
 }
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
+  const { from, to } = await searchParams;
   const account = await getConnectedAccount();
 
   if (!account) {
@@ -46,10 +54,17 @@ export default async function AnalyticsPage() {
     (account.tokenExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   );
 
+  const fromDate = from ? new Date(from + "T00:00:00") : undefined;
+  const toDate = to ? new Date(to + "T23:59:59") : undefined;
+
   const [summary, publishedPosts, allMetrics] = await Promise.all([
     getAccountSummary(account.igUserId, account.accessToken).catch(() => null),
     db.query.posts.findMany({
-      where: eq(posts.status, "PUBLISHED"),
+      where: and(
+        eq(posts.status, "PUBLISHED"),
+        fromDate ? gte(posts.publishedAt, fromDate) : undefined,
+        toDate ? lte(posts.publishedAt, toDate) : undefined,
+      ),
       orderBy: (p, { desc }) => [desc(p.publishedAt)],
     }),
     db.query.postMetrics.findMany({
@@ -63,16 +78,35 @@ export default async function AnalyticsPage() {
     if (!latestMetrics.has(m.postId)) latestMetrics.set(m.postId, m);
   }
 
-  const hasMetrics = latestMetrics.size > 0;
-  const totalReach = Array.from(latestMetrics.values()).reduce((s, m) => s + (m.reach ?? 0), 0);
-  const totalImpressions = Array.from(latestMetrics.values()).reduce((s, m) => s + (m.impressions ?? 0), 0);
-  const totalLikes = Array.from(latestMetrics.values()).reduce((s, m) => s + (m.likeCount ?? 0), 0);
+  // Totals only for filtered posts
+  const filteredMetrics = publishedPosts
+    .map((p) => latestMetrics.get(p.id))
+    .filter(Boolean) as typeof allMetrics;
+
+  const hasMetrics = filteredMetrics.length > 0;
+  const totalReach = filteredMetrics.reduce((s, m) => s + (m.reach ?? 0), 0);
+  const totalImpressions = filteredMetrics.reduce((s, m) => s + (m.impressions ?? 0), 0);
+  const totalLikes = filteredMetrics.reduce((s, m) => s + (m.likeCount ?? 0), 0);
+  const totalSaved = filteredMetrics.reduce((s, m) => s + (m.savedCount ?? 0), 0);
+
+  const periodLabel =
+    from && to
+      ? `${new Date(from).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })} → ${new Date(to).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}`
+      : "Todo el tiempo";
 
   return (
     <main className="page">
-      <div className="page-header">
-        <h1 className="page-title">Analítica</h1>
-        <p className="page-subtitle">Rendimiento de tu cuenta de Instagram</p>
+      {/* Header */}
+      <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
+        <div>
+          <h1 className="page-title">Analítica</h1>
+          <p className="page-subtitle">{periodLabel}</p>
+        </div>
+      </div>
+
+      {/* Period filter */}
+      <div style={{ marginBottom: "1.5rem" }}>
+        <PeriodFilter />
       </div>
 
       {/* Account card */}
@@ -82,12 +116,12 @@ export default async function AnalyticsPage() {
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>@{account.igUsername}</span>
               {tokenDaysLeft < 15 && (
-                <span style={{ fontSize: "0.72rem", background: "rgba(239,68,68,0.1)", color: "var(--danger)", border: "1px solid rgba(239,68,68,0.25)", padding: "0.15rem 0.5rem", borderRadius: 5, fontWeight: 600 }}>
+                <span style={{ fontSize: "0.7rem", background: "rgba(239,68,68,0.1)", color: "var(--danger)", border: "1px solid rgba(239,68,68,0.25)", padding: "0.15rem 0.5rem", borderRadius: 5, fontWeight: 600 }}>
                   Token expira en {tokenDaysLeft}d
                 </span>
               )}
             </div>
-            <div style={{ color: "var(--text-secondary)", fontSize: "0.8rem", marginTop: "0.2rem" }}>
+            <div style={{ color: "var(--text-secondary)", fontSize: "0.78rem", marginTop: "0.2rem" }}>
               Token válido por {tokenDaysLeft} días
               {tokenDaysLeft < 15 && (
                 <> · <a href="/api/auth/instagram/start" style={{ color: "var(--accent)" }}>Renovar acceso</a></>
@@ -97,12 +131,16 @@ export default async function AnalyticsPage() {
           {summary && (
             <div style={{ display: "flex", gap: "2.5rem" }}>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontWeight: 700, fontSize: "1.25rem" }}>{summary.followersCount.toLocaleString()}</div>
-                <div style={{ color: "var(--text-secondary)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>Seguidores</div>
+                <div style={{ fontWeight: 700, fontSize: "1.4rem", letterSpacing: "-0.03em" }}>
+                  {summary.followersCount.toLocaleString()}
+                </div>
+                <div style={{ color: "var(--text-secondary)", fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Seguidores</div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontWeight: 700, fontSize: "1.25rem" }}>{summary.mediaCount}</div>
-                <div style={{ color: "var(--text-secondary)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>Posts totales</div>
+                <div style={{ fontWeight: 700, fontSize: "1.4rem", letterSpacing: "-0.03em" }}>
+                  {summary.mediaCount}
+                </div>
+                <div style={{ color: "var(--text-secondary)", fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Posts totales</div>
               </div>
             </div>
           )}
@@ -112,42 +150,41 @@ export default async function AnalyticsPage() {
       {/* Stats grid */}
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-label">Posts publicados</div>
+          <div className="stat-label">Posts en período</div>
           <div className="stat-value">{publishedPosts.length}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Alcance total</div>
-          <div className={`stat-value${hasMetrics ? " accent" : ""}`}>
+          <div className={`stat-value${hasMetrics && totalReach > 0 ? " accent" : ""}`}>
             {hasMetrics ? fmt(totalReach) : "—"}
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Impresiones totales</div>
+          <div className="stat-label">Impresiones</div>
           <div className="stat-value">{hasMetrics ? fmt(totalImpressions) : "—"}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Likes totales</div>
-          <div className="stat-value">{hasMetrics ? fmt(totalLikes) : "—"}</div>
+          <div className="stat-label">Likes · Guardados</div>
+          <div className="stat-value">
+            {hasMetrics ? `${fmt(totalLikes)} · ${fmt(totalSaved)}` : "—"}
+          </div>
         </div>
       </div>
 
-      {/* Info banner if no metrics yet */}
-      {!hasMetrics && publishedPosts.length > 0 && (
-        <div className="alert-info">
-          Las métricas se sincronizan automáticamente una vez por día. Los datos aparecerán aquí después del primer sync diario.
-        </div>
-      )}
-
       {/* Posts table */}
       <div className="card">
-        <h2 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "1.25rem" }}>
-          Posts publicados
+        <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "1.25rem", color: "var(--text-secondary)" }}>
+          {publishedPosts.length} post{publishedPosts.length !== 1 ? "s" : ""} · {periodLabel}
         </h2>
 
         {publishedPosts.length === 0 ? (
           <div className="empty">
             <div className="empty-icon">📊</div>
-            <p>Todavía no hay posts publicados. Los posts programados aparecerán aquí después de publicarse.</p>
+            <p>
+              {from || to
+                ? "No hay posts en el período seleccionado."
+                : "No hay posts publicados todavía. Importá el historial de Instagram desde GitHub Actions."}
+            </p>
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
@@ -162,6 +199,7 @@ export default async function AnalyticsPage() {
                   <th style={{ textAlign: "right" }}>Likes</th>
                   <th style={{ textAlign: "right" }}>Coment.</th>
                   <th style={{ textAlign: "right" }}>Guard.</th>
+                  <th style={{ textAlign: "right" }}>Shares</th>
                   <th></th>
                 </tr>
               </thead>
@@ -170,7 +208,7 @@ export default async function AnalyticsPage() {
                   const m = latestMetrics.get(post.id);
                   return (
                     <tr key={post.id}>
-                      <td className="muted" style={{ whiteSpace: "nowrap", fontSize: "0.78rem" }}>
+                      <td className="muted" style={{ whiteSpace: "nowrap", fontSize: "0.775rem" }}>
                         {post.publishedAt
                           ? new Date(post.publishedAt).toLocaleDateString("es-AR", {
                               day: "numeric",
@@ -184,24 +222,20 @@ export default async function AnalyticsPage() {
                           {MEDIA_TYPE_LABEL[post.mediaType]}
                         </span>
                       </td>
-                      <td style={{ maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)", fontSize: "0.8rem" }}>
-                        {post.caption}
+                      <td style={{ maxWidth: "240px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)", fontSize: "0.8rem" }}>
+                        {post.caption || <span style={{ color: "var(--text-tertiary)" }}>Sin caption</span>}
                       </td>
-                      <td className="num" style={{ color: m?.reach ? "var(--accent)" : "var(--text-tertiary)" }}>
+                      <td className="num" style={{ color: m?.reach ? "var(--accent)" : "var(--text-tertiary)", fontWeight: m?.reach ? 600 : 400 }}>
                         {fmt(m?.reach)}
                       </td>
                       <td className="num muted">{fmt(m?.impressions)}</td>
                       <td className="num muted">{fmt(m?.likeCount)}</td>
                       <td className="num muted">{fmt(m?.commentCount)}</td>
                       <td className="num muted">{fmt(m?.savedCount)}</td>
+                      <td className="num muted">{fmt(m?.sharesCount)}</td>
                       <td>
                         {post.igPermalink && (
-                          <a
-                            href={post.igPermalink}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ color: "var(--accent)", fontSize: "0.78rem", whiteSpace: "nowrap" }}
-                          >
+                          <a href={post.igPermalink} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", fontSize: "0.75rem", whiteSpace: "nowrap" }}>
                             Ver →
                           </a>
                         )}
