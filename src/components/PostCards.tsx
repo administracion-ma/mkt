@@ -265,27 +265,33 @@ function Thumbnail({ row }: { row: PostCardRow }) {
 export function PostCards({ rows }: { rows: PostCardRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("date");
 
-  // Benchmark siempre contra los últimos 10 posts (igual que Instagram Edits)
-  const benchmarkData = useMemo(() => {
-    const recent = [...rows]
-      .filter(r => r.publishedAt != null)
-      .sort((a, b) => (b.publishedAt! > a.publishedAt! ? 1 : -1))
-      .slice(0, 10);
-    if (recent.length < 4) return null;
-    const nums = (fn: (r: PostCardRow) => number | null) =>
-      recent.map(fn).filter((v): v is number => v != null);
+  // Benchmark contra los últimos 10 posts DEL MISMO TIPO (igual que Instagram Edits: solo reels vs reels)
+  const benchmarkByType = useMemo(() => {
+    const makePool = (filter: (r: PostCardRow) => boolean) => {
+      const pool = [...rows]
+        .filter(r => r.publishedAt != null && filter(r))
+        .sort((a, b) => (b.publishedAt! > a.publishedAt! ? 1 : -1))
+        .slice(0, 10);
+      if (pool.length < 3) return null;
+      const nums = (fn: (r: PostCardRow) => number | null) =>
+        pool.map(fn).filter((v): v is number => v != null);
+      return {
+        reach:   median(nums(r => r.reach)),
+        er:      median(nums(r => er(r))),
+        sr:      median(nums(r => rate(r.savedCount, r.reach))),
+        lr:      median(nums(r => rate(r.likeCount, r.reach))),
+        cr:      median(nums(r => rate(r.commentCount, r.reach))),
+        shr:     median(nums(r => rate(r.sharesCount, r.reach))),
+        watch:   median(nums(r => r.avgWatchTimeMs)),
+        play:    median(nums(r => rate(r.plays, r.reach))),
+        skip:    median(nums(r => r.skipRate)),
+        shares:  median(nums(r => r.sharesCount)),
+        follows: median(nums(r => r.followsCount)),
+      };
+    };
     return {
-      reach:   median(nums(r => r.reach)),
-      er:      median(nums(r => er(r))),
-      sr:      median(nums(r => rate(r.savedCount, r.reach))),
-      lr:      median(nums(r => rate(r.likeCount, r.reach))),
-      cr:      median(nums(r => rate(r.commentCount, r.reach))),
-      shr:     median(nums(r => rate(r.sharesCount, r.reach))),
-      watch:   median(nums(r => r.avgWatchTimeMs)),
-      play:    median(nums(r => rate(r.plays, r.reach))),
-      skip:    median(nums(r => r.skipRate)),
-      shares:  median(nums(r => r.sharesCount)),
-      follows: median(nums(r => r.followsCount)),
+      video: makePool(r => r.mediaType === "REELS" || r.mediaType === "VIDEO"),
+      image: makePool(r => r.mediaType === "IMAGE" || r.mediaType === "CAROUSEL_ALBUM"),
     };
   }, [rows]);
 
@@ -295,11 +301,12 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
   const scoreMap = useMemo(() => {
     const m = new Map<number, number>();
     for (const r of rows) {
-      const s = algoScore(r, benchmarkData, isVideo(r));
+      const bd = isVideo(r) ? benchmarkByType.video : benchmarkByType.image;
+      const s = algoScore(r, bd, isVideo(r));
       if (s != null) m.set(r.id, s);
     }
     return m;
-  }, [rows, benchmarkData]);
+  }, [rows, benchmarkByType]);
 
   const sorted = useMemo(
     () => [...rows].sort((a, b) => sortValue(b, sortKey, scoreMap) - sortValue(a, sortKey, scoreMap)),
@@ -335,7 +342,7 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
           const video  = isVideo(row);
           const color  = TYPE_COLOR[row.mediaType] ?? "#6b7280";
           const erGood = erVal != null && erVal >= 0.05;
-          const bd     = benchmarkData;
+          const bd     = video ? benchmarkByType.video : benchmarkByType.image;
           const score  = scoreMap.get(row.id) ?? null;
           const isViral = bd && row.reach != null && row.reach >= bd.reach * 2.5;
 
