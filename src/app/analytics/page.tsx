@@ -47,86 +47,21 @@ export default async function AnalyticsPage({
   const fromDate = from ? new Date(from + "T00:00:00") : undefined;
   const toDate = to ? new Date(to + "T23:59:59") : undefined;
 
-  // Use try/catch per query so new columns not yet in DB don't crash the page
   const summary = await getAccountSummary(account.igUserId, account.accessToken).catch(() => null);
 
-  let publishedPosts: Awaited<ReturnType<typeof db.query.posts.findMany>> = [];
-  try {
-    publishedPosts = await db.query.posts.findMany({
+  const [publishedPosts, allMetrics] = await Promise.all([
+    db.query.posts.findMany({
       where: and(
         eq(posts.status, "PUBLISHED"),
         fromDate ? gte(posts.publishedAt, fromDate) : undefined,
         toDate ? lte(posts.publishedAt, toDate) : undefined,
       ),
       orderBy: (p, { desc }) => [desc(p.publishedAt)],
-    });
-  } catch {
-    // video_duration_ms may not exist yet — select without it
-    const { sql } = await import("drizzle-orm");
-    const raw = await db.execute(sql`
-      SELECT id, pillar_id, caption, media_type, media_url,
-             scheduled_at, status, ig_media_id, ig_permalink,
-             publish_error, published_at, created_at, updated_at
-      FROM posts
-      WHERE status = 'PUBLISHED'
-      ORDER BY published_at DESC
-    `);
-    publishedPosts = Array.from(raw).map((r: Record<string, unknown>) => ({
-      id: r.id as number,
-      pillarId: r.pillar_id as number,
-      caption: r.caption as string,
-      mediaType: r.media_type as typeof publishedPosts[0]["mediaType"],
-      mediaUrl: r.media_url as string,
-      videoDurationMs: null,
-      scheduledAt: new Date(r.scheduled_at as string),
-      status: r.status as typeof publishedPosts[0]["status"],
-      igMediaId: r.ig_media_id as string | null,
-      igPermalink: r.ig_permalink as string | null,
-      publishError: r.publish_error as string | null,
-      publishedAt: r.published_at ? new Date(r.published_at as string) : null,
-      createdAt: new Date(r.created_at as string),
-      updatedAt: new Date(r.updated_at as string),
-    }));
-  }
-
-  let allMetrics: Awaited<ReturnType<typeof db.query.postMetrics.findMany>> = [];
-  try {
-    allMetrics = await db.query.postMetrics.findMany({
+    }),
+    db.query.postMetrics.findMany({
       orderBy: (m, { desc }) => [desc(m.capturedAt)],
-    });
-  } catch {
-    // New columns may not exist yet — select only known columns
-    const { sql } = await import("drizzle-orm");
-    const raw = await db.execute(sql`
-      SELECT id, post_id, captured_at, reach, impressions,
-             like_count, comment_count, saved_count, shares_count,
-             plays, avg_watch_time_ms, skip_rate, total_interactions
-      FROM post_metrics
-      ORDER BY captured_at DESC
-    `);
-    allMetrics = Array.from(raw).map((r: Record<string, unknown>) => ({
-      id: r.id as number,
-      postId: r.post_id as number,
-      capturedAt: new Date(r.captured_at as string),
-      reach: r.reach as number | null,
-      impressions: r.impressions as number | null,
-      likeCount: r.like_count as number | null,
-      commentCount: r.comment_count as number | null,
-      savedCount: r.saved_count as number | null,
-      sharesCount: r.shares_count as number | null,
-      repostsCount: null,
-      videoViews: null,
-      plays: r.plays as number | null,
-      avgWatchTimeMs: r.avg_watch_time_ms as number | null,
-      skipRate: r.skip_rate as number | null,
-      profileLinkClicks: null,
-      totalInteractions: r.total_interactions as number | null,
-      followsCount: null,
-      profileVisits: null,
-      followersReach: null,
-      nonFollowersReach: null,
-    }));
-  }
+    }),
+  ]);
 
   // Latest metrics snapshot per post
   const latestMetrics = new Map<number, typeof allMetrics[0]>();

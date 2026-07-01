@@ -61,7 +61,6 @@ export const postMetrics = pgTable("post_metrics", {
   savedCount: integer("saved_count"),
   sharesCount: integer("shares_count"),
   repostsCount: integer("reposts_count"),
-  videoViews: integer("video_views"),
   plays: integer("plays"),
   avgWatchTimeMs: integer("avg_watch_time_ms"),
   skipRate: doublePrecision("skip_rate"),
