@@ -51,17 +51,22 @@ function sortValue(r: PostCardRow, key: SortKey): number {
 }
 
 // ── Benchmark ────────────────────────────────────────────────────────────────
+// Compara contra el promedio propio: ±30% define "típico".
+// Así no se fuerza que siempre el 25% quede en rojo/verde —
+// si todos los posts andan bien, la mayoría queda en gris.
 type BmLevel = "top" | "typical" | "low";
 
-function pct(values: number[], p: number): number {
+function avg(values: number[]): number {
   if (!values.length) return 0;
-  const s = [...values].sort((a, b) => a - b);
-  return s[Math.min(Math.floor(s.length * p), s.length - 1)];
+  return values.reduce((s, v) => s + v, 0) / values.length;
 }
-function bm(value: number | null, lo: number, hi: number, invert = false): BmLevel | undefined {
-  if (value == null || lo === hi) return undefined;
-  if (invert) return value <= lo ? "top" : value >= hi ? "low" : "typical";
-  return value >= hi ? "top" : value <= lo ? "low" : "typical";
+
+// invert=true: menor es mejor (ej. skip rate)
+function bm(value: number | null, mean: number, invert = false): BmLevel | undefined {
+  if (value == null || mean === 0) return undefined;
+  const ratio = value / mean;
+  if (invert) return ratio <= 0.7 ? "top" : ratio >= 1.3 ? "low" : "typical";
+  return ratio >= 1.3 ? "top" : ratio <= 0.7 ? "low" : "typical";
 }
 const BM_LABEL: Record<BmLevel, string> = { top: "Valor más alto", typical: "Valor típico", low: "Valor más bajo" };
 const BM_COLOR: Record<BmLevel, string> = { top: "#22c55e", typical: "#6b7280", low: "#ef4444" };
@@ -226,14 +231,14 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
       rows.map(fn).filter((v): v is number => v != null);
 
     return {
-      reach:   { lo: pct(nums(r => r.reach), 0.25),              hi: pct(nums(r => r.reach), 0.75) },
-      er:      { lo: pct(nums(r => er(r)), 0.25),                hi: pct(nums(r => er(r)), 0.75) },
-      sr:      { lo: pct(nums(r => rate(r.savedCount, r.reach)), 0.25), hi: pct(nums(r => rate(r.savedCount, r.reach)), 0.75) },
-      watch:   { lo: pct(nums(r => r.avgWatchTimeMs), 0.25),     hi: pct(nums(r => r.avgWatchTimeMs), 0.75) },
-      play:    { lo: pct(nums(r => rate(r.plays, r.reach)), 0.25), hi: pct(nums(r => rate(r.plays, r.reach)), 0.75) },
-      skip:    { lo: pct(nums(r => r.skipRate), 0.25),           hi: pct(nums(r => r.skipRate), 0.75) },
-      shares:  { lo: pct(nums(r => r.sharesCount), 0.25),        hi: pct(nums(r => r.sharesCount), 0.75) },
-      follows: { lo: pct(nums(r => r.followsCount), 0.25),       hi: pct(nums(r => r.followsCount), 0.75) },
+      reach:   avg(nums(r => r.reach)),
+      er:      avg(nums(r => er(r))),
+      sr:      avg(nums(r => rate(r.savedCount, r.reach))),
+      watch:   avg(nums(r => r.avgWatchTimeMs)),
+      play:    avg(nums(r => rate(r.plays, r.reach))),
+      skip:    avg(nums(r => r.skipRate)),
+      shares:  avg(nums(r => r.sharesCount)),
+      follows: avg(nums(r => r.followsCount)),
     };
   }, [rows]);
 
@@ -308,25 +313,25 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
                 {/* Fila 1: métricas absolutas principales */}
                 <div style={{ display: "flex", gap: "0.15rem", flexWrap: "wrap", alignItems: "flex-start" }}>
                   <Stat label="Alcance" value={fmt(row.reach)} accent={!!row.reach}
-                    benchmark={bd ? bm(row.reach, bd.reach.lo, bd.reach.hi) : undefined}
+                    benchmark={bd ? bm(row.reach, bd.reach) : undefined}
                     tooltip="Personas únicas que vieron este post. Base para calcular todo lo demás." />
                   <Div />
                   <Stat label="ER%" value={erVal != null ? `${(erVal * 100).toFixed(1)}%` : "—"} accent={erGood}
-                    benchmark={bd ? bm(erVal, bd.er.lo, bd.er.hi) : undefined}
+                    benchmark={bd ? bm(erVal, bd.er) : undefined}
                     tooltip="Engagement Rate: de cada 100 personas que lo vieron, cuántas reaccionaron (likes + comentarios + guardados + compartidos). Arriba del 5% es muy bueno." />
                   {video && (
                     <><Div />
                       <Stat label="Vistas" value={fmt(row.plays)}
                         tooltip="Total de reproducciones. Puede superar el alcance si alguien lo vio más de una vez." />
                       <Stat label="Play%" value={prVal != null ? `${(prVal * 100).toFixed(1)}%` : "—"}
-                        benchmark={bd ? bm(prVal, bd.play.lo, bd.play.hi) : undefined}
+                        benchmark={bd ? bm(prVal, bd.play) : undefined}
                         tooltip="Reproducciones divididas por alcance. Más de 100% = la gente lo repitió. Cuanto más alto, mejor." />
                       <Stat label="Watch" value={fmtSec(row.avgWatchTimeMs)}
-                        benchmark={bd ? bm(row.avgWatchTimeMs, bd.watch.lo, bd.watch.hi) : undefined}
+                        benchmark={bd ? bm(row.avgWatchTimeMs, bd.watch) : undefined}
                         tooltip="Tiempo promedio viendo el video antes de salir. Instagram premia los videos que retienen la atención." />
                       {row.skipRate != null && (
                         <Stat label="Skip%" value={`${row.skipRate.toFixed(1)}%`}
-                          benchmark={bd ? bm(row.skipRate, bd.skip.lo, bd.skip.hi, true) : undefined}
+                          benchmark={bd ? bm(row.skipRate, bd.skip, true) : undefined}
                           tooltip="Porcentaje que saltó el video sin reproducirlo. Menos es mejor. Si es alto, la miniatura o el primer segundo no enganchan." />
                       )}
                     </>
@@ -335,7 +340,7 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
                   <Stat label="Guard." value={fmt(row.savedCount)}
                     tooltip="Veces que alguien guardó el post. Señal más fuerte para el algoritmo." />
                   <Stat label="Shares" value={fmt(row.sharesCount)}
-                    benchmark={bd ? bm(row.sharesCount, bd.shares.lo, bd.shares.hi) : undefined}
+                    benchmark={bd ? bm(row.sharesCount, bd.shares) : undefined}
                     tooltip="Veces que compartieron por DM o historias. Cada share lleva tu contenido a personas que no te siguen." />
                   <Stat label="Likes" value={fmt(row.likeCount)}
                     tooltip="Cantidad de 'me gusta'. La interacción más básica." />
@@ -348,7 +353,7 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
                   {row.followsCount != null && (
                     <><Div />
                       <Stat label="+Seg." value={fmt(row.followsCount)}
-                        benchmark={bd ? bm(row.followsCount, bd.follows.lo, bd.follows.hi) : undefined}
+                        benchmark={bd ? bm(row.followsCount, bd.follows) : undefined}
                         tooltip="Personas que empezaron a seguirte después de ver este post." />
                     </>
                   )}
@@ -361,7 +366,7 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
                 {/* Fila 2: tasas calculadas (%) */}
                 <div style={{ display: "flex", gap: "0.15rem", flexWrap: "wrap", alignItems: "flex-start", paddingTop: "0.3rem", borderTop: "1px dashed rgba(255,255,255,0.06)" }}>
                   <Stat label="Guard.%" value={srVal != null ? `${(srVal * 100).toFixed(2)}%` : "—"}
-                    benchmark={bd ? bm(srVal, bd.sr.lo, bd.sr.hi) : undefined}
+                    benchmark={bd ? bm(srVal, bd.sr) : undefined}
                     tooltip="Guardados / alcance. La métrica más importante: si alguien guarda, Instagram impulsa masivamente el post." />
                   <Stat label="Like%" value={lrVal != null ? `${(lrVal * 100).toFixed(1)}%` : "—"}
                     tooltip="Likes divididos por alcance. De cada 100 personas que lo vieron, cuántas dieron like." />
