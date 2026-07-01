@@ -37,6 +37,16 @@ async function main() {
     END$$;
   `);
   console.log("Migration applied: CAROUSEL_ALBUM added to media_type enum.");
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS account_metrics (
+      id serial PRIMARY KEY,
+      captured_at timestamptz NOT NULL DEFAULT now(),
+      followers_count integer,
+      media_count integer
+    );
+  `);
+  console.log("Migration applied: account_metrics table.");
 }
 
 main()

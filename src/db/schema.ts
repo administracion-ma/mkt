@@ -72,6 +72,14 @@ export const postMetrics = pgTable("post_metrics", {
   nonFollowersReach: integer("non_followers_reach"),
 });
 
+// Snapshot diario de la cuenta (para gráficos de evolución)
+export const accountMetrics = pgTable("account_metrics", {
+  id: serial("id").primaryKey(),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  followersCount: integer("followers_count"),
+  mediaCount: integer("media_count"),
+});
+
 export const analysisReports = pgTable("analysis_reports", {
   id: serial("id").primaryKey(),
   periodFrom: timestamp("period_from", { withTimezone: true }).notNull(),

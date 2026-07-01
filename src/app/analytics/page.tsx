@@ -5,6 +5,7 @@ import { getConnectedAccount } from "@/lib/instagram/account-store";
 import { getAccountSummary } from "@/lib/instagram/graph-api";
 import { PeriodFilter } from "@/components/PeriodFilter";
 import { PostCards, type PostCardRow } from "@/components/PostCards";
+import { SyncButton } from "@/components/SyncButton";
 
 export const dynamic = "force-dynamic";
 
@@ -115,14 +116,21 @@ export default async function AnalyticsPage({
   const totalShares = withMetrics.reduce((s, r) => s + (r.sharesCount ?? 0), 0);
   const totalSaved = withMetrics.reduce((s, r) => s + (r.savedCount ?? 0), 0);
 
-  const bestPost = withMetrics.length > 0
-    ? withMetrics.reduce((best, r) => {
+  // Mejor post por ER%, pero solo entre posts con alcance relevante
+  // (un ER alto con 200 de alcance no es tu mejor post)
+  const minReachForBest = avgReach ? Math.max(300, avgReach * 0.3) : 300;
+  const bestCandidates = withMetrics.filter((r) => (r.reach ?? 0) >= minReachForBest);
+  const bestPost = bestCandidates.length > 0
+    ? bestCandidates.reduce((best, r) => {
         if (!r.reach) return best;
         const erR = ((r.likeCount ?? 0) + (r.commentCount ?? 0) + (r.savedCount ?? 0) + (r.sharesCount ?? 0)) / r.reach;
         const erB = best.reach ? ((best.likeCount ?? 0) + (best.commentCount ?? 0) + (best.savedCount ?? 0) + (best.sharesCount ?? 0)) / best.reach : 0;
         return erR > erB ? r : best;
       })
     : null;
+
+  // Última sincronización (los snapshots vienen ordenados por capturedAt desc)
+  const lastSyncAt = allMetrics[0]?.capturedAt?.toISOString() ?? null;
 
   const periodLabel =
     from && to
@@ -136,6 +144,7 @@ export default async function AnalyticsPage({
           <h1 className="page-title">Analítica</h1>
           <p className="page-subtitle">{periodLabel}</p>
         </div>
+        <SyncButton lastSyncAt={lastSyncAt} />
       </div>
 
       <div style={{ marginBottom: "1.5rem" }}>

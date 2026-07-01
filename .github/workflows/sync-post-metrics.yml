@@ -2,7 +2,8 @@ name: Sincronizar métricas de posts
 
 on:
   schedule:
-    - cron: "0 8 * * *"
+    # 3 veces por día: 00:00, 10:00 y 20:00 hora Argentina (UTC-3)
+    - cron: "0 3,13,23 * * *"
   workflow_dispatch: {}
 
 jobs:

@@ -1,9 +1,29 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { PostRow } from "./AnalyticsTable";
 
-export type PostCardRow = PostRow & { mediaUrl: string | null };
+export type PostCardRow = {
+  id: number;
+  publishedAt: string | null;
+  mediaType: string;
+  caption: string | null;
+  igPermalink: string | null;
+  mediaUrl: string | null;
+  reach: number | null;
+  plays: number | null;
+  likeCount: number | null;
+  commentCount: number | null;
+  savedCount: number | null;
+  sharesCount: number | null;
+  repostsCount: number | null;
+  avgWatchTimeMs: number | null;
+  skipRate: number | null;
+  followsCount: number | null;
+  profileVisits: number | null;
+  followersReach: number | null;
+  nonFollowersReach: number | null;
+  videoDurationMs: number | null;
+};
 
 function fmt(n: number | null | undefined): string {
   if (n == null) return "—";

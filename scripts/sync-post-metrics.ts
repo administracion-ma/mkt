@@ -1,14 +1,21 @@
-import { and, eq, gte, lt } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../src/db/client";
-import { posts, postMetrics } from "../src/db/schema";
+import { posts } from "../src/db/schema";
 import { getConnectedAccount } from "../src/lib/instagram/account-store";
-import { getMediaInsights, graphGetMediaDuration } from "../src/lib/instagram/graph-api";
+import { syncPostInsights, snapshotAccount } from "../src/lib/instagram/sync";
 
 async function main() {
   const account = await getConnectedAccount();
   if (!account) {
     console.log("No hay ninguna cuenta de Instagram conectada.");
     return;
+  }
+
+  try {
+    await snapshotAccount(account);
+    console.log("Snapshot de cuenta OK.");
+  } catch (err) {
+    console.error("Snapshot de cuenta FALLÓ:", err instanceof Error ? err.message : err);
   }
 
   const publishedPosts = await db.query.posts.findMany({
@@ -23,90 +30,11 @@ async function main() {
 
   console.log(`Sincronizando métricas de ${withMedia.length} post(s)...`);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
   for (const post of withMedia) {
     console.log(`-> Post #${post.id} (${post.igMediaId})`);
     try {
-      const insights = await getMediaInsights(
-        post.igMediaId!,
-        account.accessToken,
-        post.mediaType as "IMAGE" | "VIDEO" | "REELS" | "CAROUSEL_ALBUM"
-      );
-
-      const metricsData = {
-        reach: insights.reach ?? null,
-        impressions: insights.impressions ?? null,
-        likeCount: insights.likeCount ?? null,
-        commentCount: insights.commentCount ?? null,
-        savedCount: insights.savedCount ?? null,
-        sharesCount: insights.sharesCount ?? null,
-        repostsCount: insights.repostsCount ?? null,
-        plays: insights.plays ?? null,
-        totalInteractions: insights.totalInteractions ?? null,
-        avgWatchTimeMs: insights.avgWatchTimeMs ?? null,
-        skipRate: insights.skipRate ?? null,
-        followsCount: insights.followsCount ?? null,
-        profileVisits: insights.profileVisits ?? null,
-        followersReach: insights.followersReach ?? null,
-        nonFollowersReach: insights.nonFollowersReach ?? null,
-        capturedAt: new Date(),
-      };
-
-      // Si la API no devolvió nada útil, no tocar la BD (preserva datos anteriores)
-      const hasData = Object.entries(metricsData).some(
-        ([k, v]) => k !== "capturedAt" && v != null
-      );
-      if (!hasData) {
-        console.log(`   Sin datos de API, preservando métricas anteriores.`);
-        continue;
-      }
-
-      const existingToday = await db.query.postMetrics.findFirst({
-        where: and(
-          eq(postMetrics.postId, post.id),
-          gte(postMetrics.capturedAt, today),
-          lt(postMetrics.capturedAt, tomorrow)
-        ),
-      });
-
-      if (existingToday) {
-        // Solo actualizar campos con valor real — nunca pisar buenos datos con null
-        const nonNullUpdate = Object.fromEntries(
-          Object.entries(metricsData).filter(([, v]) => v != null)
-        );
-        await db.update(postMetrics).set(nonNullUpdate).where(eq(postMetrics.id, existingToday.id));
-      } else {
-        try {
-          await db.insert(postMetrics).values({ postId: post.id, ...metricsData });
-        } catch {
-          const { repostsCount, followersReach, nonFollowersReach, ...legacyData } = metricsData;
-          await db.insert(postMetrics).values({ postId: post.id, ...legacyData });
-        }
-      }
-
-      // Fill video duration if missing (needed for retention curve)
-      if (
-        post.videoDurationMs == null &&
-        (post.mediaType === "VIDEO" || post.mediaType === "REELS")
-      ) {
-        try {
-          const durationMs = await graphGetMediaDuration(post.igMediaId!, account.accessToken);
-          if (durationMs != null) {
-            await db.update(posts).set({ videoDurationMs: durationMs }).where(eq(posts.id, post.id));
-            console.log(`   duración: ${(durationMs / 1000).toFixed(1)}s`);
-          }
-        } catch {
-          // not critical
-        }
-      }
-
-      console.log(
-        `   OK reach=${insights.reach ?? "—"} views=${insights.plays ?? "—"} likes=${insights.likeCount ?? "—"} guard=${insights.savedCount ?? "—"} reposts=${insights.repostsCount ?? "—"} seg=${insights.followersReach ?? "—"} noSeg=${insights.nonFollowersReach ?? "—"} avgWatch=${insights.avgWatchTimeMs != null ? `${(insights.avgWatchTimeMs / 1000).toFixed(1)}s` : "—"} skip=${insights.skipRate ?? "—"}%`
-      );
+      const ok = await syncPostInsights(post, account);
+      console.log(ok ? "   OK" : "   Sin datos de API, preservando métricas anteriores.");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido";
       console.error(`   FALLÓ: ${message}`);
