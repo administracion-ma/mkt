@@ -252,10 +252,9 @@ export async function getMediaInsights(
     // insights permission might not cover this field
   }
 
-  // impressions is only valid for IMAGE/CAROUSEL; VIDEO/REELS uses plays instead
-  const metricsList = isVideo
-    ? ["reach", "plays", "saved", "shares", "total_interactions"]
-    : ["impressions", "reach", "saved", "shares", "total_interactions"];
+  // "views" is the API name for video view count (stored as `plays` in our schema)
+  const metricsList = ["impressions", "reach", "saved", "shares", "total_interactions"];
+  if (isVideo) metricsList.push("views");
 
   try {
     const data = await graphGet<{
@@ -275,7 +274,7 @@ export async function getMediaInsights(
         case "reach":              result.reach = value; break;
         case "saved":              result.savedCount = value; break;
         case "shares":             result.sharesCount = value; break;
-        case "plays":              result.plays = value; break;
+        case "views":              result.plays = value; break;
         case "total_interactions": result.totalInteractions = value; break;
       }
     }
