@@ -193,7 +193,7 @@ export function AnalyticsTable({ rows }: { rows: PostRow[] }) {
                   {video ? fmtSec(row.avgWatchTimeMs) : "—"}
                 </td>
                 <td className="num muted" style={{ fontSize: "0.78rem" }}>
-                  {video ? fmtPct(row.skipRate) : "—"}
+                  {video ? (row.skipRate != null ? `${row.skipRate.toFixed(1)}%` : "—") : "—"}
                 </td>
                 <td className="num muted">{fmt(row.likeCount)}</td>
                 <td className="num muted">{fmt(row.commentCount)}</td>
