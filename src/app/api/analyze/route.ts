@@ -144,6 +144,12 @@ export async function POST(request: NextRequest) {
     if (err instanceof Anthropic.RateLimitError) {
       return NextResponse.json({ error: "Rate limit de Anthropic. Probá en unos minutos." }, { status: 429 });
     }
+    if (err instanceof Anthropic.PermissionDeniedError || err instanceof Anthropic.BadRequestError) {
+      return NextResponse.json(
+        { error: "No hay créditos disponibles en la cuenta de Anthropic. Cargá saldo en console.anthropic.com → Billing." },
+        { status: 402 }
+      );
+    }
     const message = err instanceof Error ? err.message : "Error desconocido";
     return NextResponse.json({ error: message }, { status: 500 });
   }
