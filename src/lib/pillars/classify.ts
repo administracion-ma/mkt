@@ -1,11 +1,16 @@
-import { eq, inArray } from "drizzle-orm";
+import { inArray, notInArray } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/db/client";
-import { posts } from "@/db/schema";
+import { posts, pillars } from "@/db/schema";
 import { env } from "@/lib/env";
 
 const MODEL = "claude-opus-4-8";
 const BATCH_SIZE = 50;
+
+// Los 8 pilares reales de Coinbox — cualquier post en un pilar que NO sea
+// uno de estos (sea cual sea su nombre: "importado", "default", etc.) es
+// candidato a reclasificar.
+const REAL_PILLAR_KEYS = ["labitconf", "granja", "dallas", "tutorial", "oficina", "garza", "taller", "post-grafico"];
 
 const SYSTEM_PROMPT = `Clasificás posts de Instagram de Coinbox Mining (venta y hosting de equipos de minería de criptomonedas) en un pilar de contenido, según el caption.
 
@@ -46,21 +51,31 @@ const SCHEMA = {
 } as const;
 
 export async function classifyImportedPosts(log: (msg: string) => void = () => {}): Promise<{ reclassified: number; total: number }> {
-  const allPillars = await db.query.pillars.findMany();
-  const pillarByKey = new Map(allPillars.map((p) => [p.key, p.id]));
-  const importado = allPillars.find((p) => p.key === "importado");
+  let allPillars = await db.query.pillars.findMany();
+  let importado = allPillars.find((p) => p.key === "importado");
   if (!importado) {
-    log("No existe el pilar 'importado', nada para reclasificar.");
-    return { reclassified: 0, total: 0 };
+    // Fallback para posts que la IA no logre clasificar con confianza
+    const [created] = await db.insert(pillars).values({ key: "importado", label: "Importado de Instagram" }).returning();
+    importado = created;
+    allPillars = await db.query.pillars.findMany();
+    log("Creado pilar de respaldo 'Importado de Instagram'.");
   }
 
-  const targets = await db.query.posts.findMany({
-    where: eq(posts.pillarId, importado.id),
-    columns: { id: true, caption: true },
-  });
+  const realPillarIds = allPillars.filter((p) => REAL_PILLAR_KEYS.includes(p.key)).map((p) => p.id);
+  const pillarByKey = new Map(allPillars.map((p) => [p.key, p.id]));
+
+  // Cualquier post que no esté ya en uno de los 8 pilares reales es candidato,
+  // sea cual sea el pilar en el que haya quedado (no asumimos el nombre).
+  const targets =
+    realPillarIds.length > 0
+      ? await db.query.posts.findMany({
+          where: notInArray(posts.pillarId, realPillarIds),
+          columns: { id: true, caption: true },
+        })
+      : await db.query.posts.findMany({ columns: { id: true, caption: true } });
 
   if (targets.length === 0) {
-    log("No hay posts en el pilar 'importado' para reclasificar.");
+    log("No hay posts para reclasificar — todos ya están en un pilar real.");
     return { reclassified: 0, total: 0 };
   }
   log(`Reclasificando ${targets.length} post(s)...`);
