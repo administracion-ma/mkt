@@ -8,6 +8,7 @@ import { getAccountSummary } from "@/lib/instagram/graph-api";
 import { PeriodFilter } from "@/components/PeriodFilter";
 import { PostCards, type PostCardRow } from "@/components/PostCards";
 import { SyncButton } from "@/components/SyncButton";
+import { AnalyzeButton } from "@/components/AnalyzeButton";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,10 @@ export default async function AnalyticsPage({
       .findMany({ orderBy: (a, { asc }) => [asc(a.capturedAt)] })
       .catch(() => []),
   ]);
+
+  const lastReport = await db.query.analysisReports
+    .findFirst({ orderBy: (r, { desc }) => [desc(r.createdAt)] })
+    .catch(() => null);
 
   // Latest metrics snapshot per post
   const latestMetrics = new Map<number, typeof allMetrics[0]>();
@@ -164,6 +169,11 @@ export default async function AnalyticsPage({
       <div style={{ marginBottom: "1.5rem" }}>
         <PeriodFilter />
       </div>
+
+      <AnalyzeButton
+        initialSummary={lastReport?.summary ?? null}
+        initialCreatedAt={lastReport?.createdAt ? lastReport.createdAt.toISOString() : null}
+      />
 
       {/* Account card */}
       <div className="card" style={{ marginBottom: "1.5rem" }}>
