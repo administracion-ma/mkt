@@ -1,6 +1,8 @@
 import { and, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
-import { posts, postMetrics } from "@/db/schema";
+import { posts, postMetrics, accountMetrics } from "@/db/schema";
+import { weeklyReach, bestTimeHeatmap, hookRanking } from "@/lib/insights";
+import { WeeklyReachChart, FollowersChart, BestTimeHeatmap, HookDiagnosis } from "@/components/InsightsPanels";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
 import { getAccountSummary } from "@/lib/instagram/graph-api";
 import { PeriodFilter } from "@/components/PeriodFilter";
@@ -50,7 +52,7 @@ export default async function AnalyticsPage({
 
   const summary = await getAccountSummary(account.igUserId, account.accessToken).catch(() => null);
 
-  const [publishedPosts, allMetrics] = await Promise.all([
+  const [publishedPosts, allMetrics, accountHistory] = await Promise.all([
     db.query.posts.findMany({
       where: and(
         eq(posts.status, "PUBLISHED"),
@@ -62,6 +64,10 @@ export default async function AnalyticsPage({
     db.query.postMetrics.findMany({
       orderBy: (m, { desc }) => [desc(m.capturedAt)],
     }),
+    // .catch: la tabla se crea con la migración; hasta entonces el panel muestra placeholder
+    db.query.accountMetrics
+      .findMany({ orderBy: (a, { asc }) => [asc(a.capturedAt)] })
+      .catch(() => []),
   ]);
 
   // Latest metrics snapshot per post
@@ -131,6 +137,14 @@ export default async function AnalyticsPage({
 
   // Última sincronización (los snapshots vienen ordenados por capturedAt desc)
   const lastSyncAt = allMetrics[0]?.capturedAt?.toISOString() ?? null;
+
+  // Insights agregados
+  const weekPoints = weeklyReach(rows);
+  const heatmap = bestTimeHeatmap(rows);
+  const hooks = hookRanking(rows);
+  const followerPoints = accountHistory
+    .filter((a) => a.followersCount != null)
+    .map((a) => ({ date: a.capturedAt.toISOString(), followers: a.followersCount! }));
 
   const periodLabel =
     from && to
@@ -227,6 +241,14 @@ export default async function AnalyticsPage({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Insights: tendencias y diagnóstico */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1rem", margin: "1.5rem 0" }}>
+        <WeeklyReachChart points={weekPoints} />
+        <FollowersChart points={followerPoints} />
+        <BestTimeHeatmap cells={heatmap.cells} best={heatmap.best} />
+        <HookDiagnosis best={hooks.best} worst={hooks.worst} medianSkip={hooks.medianSkip} />
       </div>
 
       {/* Posts cards */}
