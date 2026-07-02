@@ -1,73 +1,78 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { db } from "@/db/client";
-import { analysisReports } from "@/db/schema";
 import { env } from "@/lib/env";
 import { buildAnalysisPayload, resolvePeriod } from "@/lib/analysis-payload";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 120;
 
 const MODEL = "claude-opus-4-8";
 
-const SYSTEM_PROMPT = `Sos el analista de marketing de Coinbox Mining (venta y hosting de equipos de minería de criptomonedas, Argentina). Analizás las métricas de Instagram y producís un informe accionable en español rioplatense.
+const SYSTEM_PROMPT = `Sos el analista de marketing de Coinbox Mining (venta y hosting de equipos de minería de criptomonedas, Argentina). Te hacen preguntas puntuales sobre las métricas de Instagram del período dado.
 
 Reglas:
-- Basate SOLO en los datos provistos. No inventes números ni tendencias.
+- Basate SOLO en los datos provistos. Si la pregunta no se puede responder con esos datos, decilo claramente en vez de inventar.
 - Priorizá las señales según el algoritmo de Instagram 2026: shares > guardados > comentarios > watch time > likes.
-- Skip rate: sano <30%, crítico >50% (pérdida de distribución).
-- Sé directo y concreto. Nada de relleno ni generalidades de manual.
+- Respondé en español rioplatense, directo y concreto, sin relleno.
+- Respuesta corta: 2-5 oraciones salvo que la pregunta pida una lista.
+- Texto plano, sin markdown.`;
 
-Estructura fija del informe (usá exactamente estos títulos, sin markdown, solo texto plano con emojis):
-📊 RESUMEN — 2-3 oraciones sobre el estado general del período.
-✅ QUÉ FUNCIONÓ — 2-3 puntos con datos concretos (mencioná posts por su caption resumido).
-❌ QUÉ NO FUNCIONÓ — 2-3 puntos con datos concretos.
-💡 HIPÓTESIS — por qué pasó lo que pasó.
-🎯 ACCIONES PARA LA SEMANA — exactamente 3 acciones concretas y ejecutables (qué postear, cuándo, qué cambiar).`;
+const MAX_HISTORY = 6;
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
-  const { from, to } = resolvePeriod(body.from, body.to);
+  const question: string = typeof body.question === "string" ? body.question.trim() : "";
+  if (!question) {
+    return NextResponse.json({ error: "Falta la pregunta." }, { status: 400 });
+  }
 
+  const history: { question: string; answer: string }[] = Array.isArray(body.history)
+    ? body.history.slice(-MAX_HISTORY)
+    : [];
+
+  const { from, to } = resolvePeriod(body.from, body.to);
   const payload = await buildAnalysisPayload(from, to);
   if (!payload) {
     return NextResponse.json(
-      { error: "No hay suficientes posts con métricas en el período para analizar." },
+      { error: "No hay suficientes posts con métricas en el período para responder." },
       { status: 400 }
     );
   }
 
   const client = new Anthropic({ apiKey: env.anthropicApiKey });
 
+  const messages: Anthropic.MessageParam[] = [
+    {
+      role: "user",
+      content: `Datos de Instagram de Coinbox Mining para el período:\n\n${JSON.stringify(payload, null, 1)}`,
+    },
+    { role: "assistant", content: "Listo, tengo los datos del período. Preguntame." },
+  ];
+  for (const h of history) {
+    messages.push({ role: "user", content: h.question });
+    messages.push({ role: "assistant", content: h.answer });
+  }
+  messages.push({ role: "user", content: question });
+
   try {
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 16000,
+      max_tokens: 2048,
       thinking: { type: "adaptive" },
       system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: `Datos de Instagram de Coinbox Mining:\n\n${JSON.stringify(payload, null, 1)}\n\nGenerá el informe.`,
-        },
-      ],
+      messages,
     });
 
-    const summary = response.content
+    const answer = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("\n");
 
-    if (!summary) {
+    if (!answer) {
       return NextResponse.json({ error: "El modelo no devolvió texto." }, { status: 502 });
     }
 
-    const [report] = await db
-      .insert(analysisReports)
-      .values({ periodFrom: from, periodTo: to, summary, modelUsed: MODEL })
-      .returning();
-
-    return NextResponse.json({ id: report.id, summary, createdAt: report.createdAt });
+    return NextResponse.json({ answer });
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) {
       return NextResponse.json(

@@ -9,6 +9,7 @@ import { PeriodFilter } from "@/components/PeriodFilter";
 import { PostCards, type PostCardRow } from "@/components/PostCards";
 import { SyncButton } from "@/components/SyncButton";
 import { AnalyzeButton } from "@/components/AnalyzeButton";
+import { AskAI } from "@/components/AskAI";
 
 export const dynamic = "force-dynamic";
 
@@ -174,6 +175,8 @@ export default async function AnalyticsPage({
         initialSummary={lastReport?.summary ?? null}
         initialCreatedAt={lastReport?.createdAt ? lastReport.createdAt.toISOString() : null}
       />
+
+      <AskAI from={from} to={to} />
 
       {/* Account card */}
       <div className="card" style={{ marginBottom: "1.5rem" }}>
