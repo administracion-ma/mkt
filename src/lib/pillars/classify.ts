@@ -70,13 +70,14 @@ async function runClassification(
   allPillars: { id: number; key: string; label: string }[],
   importadoId: number,
   log: (msg: string) => void
-): Promise<number> {
-  if (targets.length === 0) return 0;
+): Promise<{ reclassified: number; movedToFallback: number }> {
+  if (targets.length === 0) return { reclassified: 0, movedToFallback: 0 };
 
   const pillarByKey = new Map(allPillars.map((p) => [p.key, p.id]));
   const client = new Anthropic({ apiKey: env.anthropicApiKey });
   const schema = schemaFor(allowedKeys);
   let reclassified = 0;
+  let movedToFallback = 0;
 
   for (let i = 0; i < targets.length; i += BATCH_SIZE) {
     const batch = targets.slice(i, i + BATCH_SIZE);
@@ -119,18 +120,24 @@ async function runClassification(
     }
 
     for (const [pillarId, ids] of idsByPillar) {
-      if (pillarId === importadoId) continue;
       await db.update(posts).set({ pillarId }).where(inArray(posts.id, ids));
-      reclassified += ids.length;
       const label = allPillars.find((p) => p.id === pillarId)?.label;
-      log(`${ids.length} post(s) -> ${label}`);
+      if (pillarId === importadoId) {
+        movedToFallback += ids.length;
+        log(`${ids.length} post(s) -> ${label} (sin tema claro)`);
+      } else {
+        reclassified += ids.length;
+        log(`${ids.length} post(s) -> ${label}`);
+      }
     }
   }
 
-  return reclassified;
+  return { reclassified, movedToFallback };
 }
 
-export async function classifyImportedPosts(log: (msg: string) => void = () => {}): Promise<{ reclassified: number; total: number }> {
+export async function classifyImportedPosts(
+  log: (msg: string) => void = () => {}
+): Promise<{ reclassified: number; movedToFallback: number; total: number }> {
   const { allPillars, importado } = await ensureFallbackPillar(log);
   const realPillarIds = allPillars.filter((p) => REAL_PILLAR_KEYS.includes(p.key)).map((p) => p.id);
 
@@ -146,22 +153,24 @@ export async function classifyImportedPosts(log: (msg: string) => void = () => {
 
   if (targets.length === 0) {
     log("No hay posts para reclasificar — todos ya están en un pilar real.");
-    return { reclassified: 0, total: 0 };
+    return { reclassified: 0, movedToFallback: 0, total: 0 };
   }
   log(`Reclasificando ${targets.length} post(s)...`);
 
-  const reclassified = await runClassification(targets, ALL_KEYS, allPillars, importado.id, log);
-  return { reclassified, total: targets.length };
+  const { reclassified, movedToFallback } = await runClassification(targets, ALL_KEYS, allPillars, importado.id, log);
+  return { reclassified, movedToFallback, total: targets.length };
 }
 
 // Corrige reels/videos que hayan quedado mal etiquetados como "post-grafico"
 // (pilar de formato, exclusivo para imágenes/carruseles).
-export async function fixMisclassifiedGraphics(log: (msg: string) => void = () => {}): Promise<{ reclassified: number; total: number }> {
+export async function fixMisclassifiedGraphics(
+  log: (msg: string) => void = () => {}
+): Promise<{ reclassified: number; movedToFallback: number; total: number }> {
   const { allPillars, importado } = await ensureFallbackPillar(log);
   const postGrafico = allPillars.find((p) => p.key === "post-grafico");
   if (!postGrafico) {
     log("No existe el pilar 'post-grafico'.");
-    return { reclassified: 0, total: 0 };
+    return { reclassified: 0, movedToFallback: 0, total: 0 };
   }
 
   const targets = await db.query.posts.findMany({
@@ -171,12 +180,12 @@ export async function fixMisclassifiedGraphics(log: (msg: string) => void = () =
 
   if (targets.length === 0) {
     log("No hay reels/videos mal etiquetados como 'post-grafico'.");
-    return { reclassified: 0, total: 0 };
+    return { reclassified: 0, movedToFallback: 0, total: 0 };
   }
   log(`Corrigiendo ${targets.length} reel(s)/video(s) etiquetados como 'post-grafico'...`);
 
   // Sin "post-grafico" como opción — obligamos a elegir un pilar de tema real o "importado"
   const allowedKeys = ALL_KEYS.filter((k) => k !== "post-grafico");
-  const reclassified = await runClassification(targets, allowedKeys, allPillars, importado.id, log);
-  return { reclassified, total: targets.length };
+  const { reclassified, movedToFallback } = await runClassification(targets, allowedKeys, allPillars, importado.id, log);
+  return { reclassified, movedToFallback, total: targets.length };
 }

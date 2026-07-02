@@ -93,7 +93,7 @@ export async function runClassification(): Promise<{ ok: boolean; message: strin
     const result = await classifyImportedPosts((msg) => logs.push(msg));
     return {
       ok: true,
-      message: `${result.reclassified} de ${result.total} posts reclasificados.\n\n${logs.join("\n")}`,
+      message: `${result.reclassified} de ${result.total} posts asignados a un pilar real. ${result.movedToFallback} sin tema claro (quedaron en Importado).\n\n${logs.join("\n")}`,
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Error desconocido" };
@@ -106,7 +106,7 @@ export async function runFixGraphics(): Promise<{ ok: boolean; message: string }
     const result = await fixMisclassifiedGraphics((msg) => logs.push(msg));
     return {
       ok: true,
-      message: `${result.reclassified} de ${result.total} reels/videos corregidos.\n\n${logs.join("\n")}`,
+      message: `${result.total} reel(s)/video(s) sacados de Post gráfico: ${result.reclassified} a un pilar real, ${result.movedToFallback} a Importado (sin tema claro).\n\n${logs.join("\n")}`,
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Error desconocido" };
