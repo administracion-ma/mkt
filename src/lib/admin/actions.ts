@@ -2,7 +2,7 @@
 
 import { sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { classifyImportedPosts } from "@/lib/pillars/classify";
+import { classifyImportedPosts, fixMisclassifiedGraphics } from "@/lib/pillars/classify";
 
 export async function runMigration(): Promise<{ ok: boolean; message: string }> {
   try {
@@ -94,6 +94,19 @@ export async function runClassification(): Promise<{ ok: boolean; message: strin
     return {
       ok: true,
       message: `${result.reclassified} de ${result.total} posts reclasificados.\n\n${logs.join("\n")}`,
+    };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Error desconocido" };
+  }
+}
+
+export async function runFixGraphics(): Promise<{ ok: boolean; message: string }> {
+  try {
+    const logs: string[] = [];
+    const result = await fixMisclassifiedGraphics((msg) => logs.push(msg));
+    return {
+      ok: true,
+      message: `${result.reclassified} de ${result.total} reels/videos corregidos.\n\n${logs.join("\n")}`,
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Error desconocido" };

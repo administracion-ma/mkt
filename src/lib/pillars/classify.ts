@@ -1,4 +1,4 @@
-import { inArray, notInArray } from "drizzle-orm";
+import { and, eq, inArray, notInArray } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/db/client";
 import { posts, pillars } from "@/db/schema";
@@ -11,8 +11,9 @@ const BATCH_SIZE = 50;
 // uno de estos (sea cual sea su nombre: "importado", "default", etc.) es
 // candidato a reclasificar.
 const REAL_PILLAR_KEYS = ["labitconf", "granja", "dallas", "tutorial", "oficina", "garza", "taller", "post-grafico"];
+const ALL_KEYS = [...REAL_PILLAR_KEYS, "importado"] as const;
 
-const SYSTEM_PROMPT = `Clasificás posts de Instagram de Coinbox Mining (venta y hosting de equipos de minería de criptomonedas) en un pilar de contenido, según el caption.
+const SYSTEM_PROMPT = `Clasificás posts de Instagram de Coinbox Mining (venta y hosting de equipos de minería de criptomonedas) en un pilar de contenido, según el caption y el tipo de post.
 
 Pilares disponibles:
 - labitconf: contenido relacionado a la conferencia/evento Labitconf
@@ -22,79 +23,77 @@ Pilares disponibles:
 - oficina: contenido de oficina, equipo de trabajo, cultura de empresa
 - garza: contenido relacionado a "Garza" (evento, sede o proyecto puntual)
 - taller: contenido de taller, reparación o service de equipos
-- post-grafico: posts gráficos/diseño sin ser un evento o lugar específico (anuncios, precios, promociones en formato imagen)
-- importado: usalo SOLO si el caption no da ninguna pista razonable de a cuál de los anteriores pertenece
+- post-grafico: SOLO para posts de tipo IMAGE o CAROUSEL_ALBUM (diseño gráfico estático: anuncios, precios, promociones). NUNCA uses este pilar para un post de tipo REELS o VIDEO, sea cual sea el texto — un reel/video promocional va en el pilar de tema más cercano (ej. tutorial, granja) o en "importado" si no hay tema claro.
+- importado: usalo si el caption no da ninguna pista razonable, o si es un REELS/VIDEO puramente promocional sin tema claro (no lo mandes a post-grafico solo porque el texto es de venta)
 
-Reglas: basate en el texto del caption. Si menciona un lugar/evento específico de la lista, priorizalo. Si es puramente promocional/gráfico sin contexto de lugar, usá post-grafico. Si no hay caption o es ambiguo, usá importado.`;
+Reglas: basate en el texto del caption Y en el tipo de post (mediaType). Si menciona un lugar/evento específico de la lista, priorizalo. "post-grafico" es un pilar de FORMATO (imagen fija), no de tema — jamás lo asignes a un REELS o VIDEO.`;
 
-const SCHEMA = {
-  type: "object",
-  properties: {
-    classifications: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "integer" },
-          pillarKey: {
-            type: "string",
-            enum: ["labitconf", "granja", "dallas", "tutorial", "oficina", "garza", "taller", "post-grafico", "importado"],
+function schemaFor(keys: readonly string[]) {
+  return {
+    type: "object",
+    properties: {
+      classifications: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            pillarKey: { type: "string", enum: keys },
           },
+          required: ["id", "pillarKey"],
+          additionalProperties: false,
         },
-        required: ["id", "pillarKey"],
-        additionalProperties: false,
       },
     },
-  },
-  required: ["classifications"],
-  additionalProperties: false,
-} as const;
+    required: ["classifications"],
+    additionalProperties: false,
+  } as const;
+}
 
-export async function classifyImportedPosts(log: (msg: string) => void = () => {}): Promise<{ reclassified: number; total: number }> {
+type TargetPost = { id: number; caption: string | null; mediaType: string };
+
+async function ensureFallbackPillar(log: (msg: string) => void) {
   let allPillars = await db.query.pillars.findMany();
   let importado = allPillars.find((p) => p.key === "importado");
   if (!importado) {
-    // Fallback para posts que la IA no logre clasificar con confianza
     const [created] = await db.insert(pillars).values({ key: "importado", label: "Importado de Instagram" }).returning();
     importado = created;
     allPillars = await db.query.pillars.findMany();
     log("Creado pilar de respaldo 'Importado de Instagram'.");
   }
+  return { allPillars, importado };
+}
 
-  const realPillarIds = allPillars.filter((p) => REAL_PILLAR_KEYS.includes(p.key)).map((p) => p.id);
+async function runClassification(
+  targets: TargetPost[],
+  allowedKeys: readonly string[],
+  allPillars: { id: number; key: string; label: string }[],
+  importadoId: number,
+  log: (msg: string) => void
+): Promise<number> {
+  if (targets.length === 0) return 0;
+
   const pillarByKey = new Map(allPillars.map((p) => [p.key, p.id]));
-
-  // Cualquier post que no esté ya en uno de los 8 pilares reales es candidato,
-  // sea cual sea el pilar en el que haya quedado (no asumimos el nombre).
-  const targets =
-    realPillarIds.length > 0
-      ? await db.query.posts.findMany({
-          where: notInArray(posts.pillarId, realPillarIds),
-          columns: { id: true, caption: true },
-        })
-      : await db.query.posts.findMany({ columns: { id: true, caption: true } });
-
-  if (targets.length === 0) {
-    log("No hay posts para reclasificar — todos ya están en un pilar real.");
-    return { reclassified: 0, total: 0 };
-  }
-  log(`Reclasificando ${targets.length} post(s)...`);
-
   const client = new Anthropic({ apiKey: env.anthropicApiKey });
+  const schema = schemaFor(allowedKeys);
   let reclassified = 0;
 
   for (let i = 0; i < targets.length; i += BATCH_SIZE) {
     const batch = targets.slice(i, i + BATCH_SIZE);
-    log(`Lote ${i / BATCH_SIZE + 1}: posts ${i + 1}-${i + batch.length}`);
+    log(`Lote ${Math.floor(i / BATCH_SIZE) + 1}: posts ${i + 1}-${i + batch.length}`);
 
-    const list = batch.map((p) => ({ id: p.id, caption: (p.caption || "(sin caption)").slice(0, 200) }));
+    const list = batch.map((p) => ({
+      id: p.id,
+      mediaType: p.mediaType,
+      caption: (p.caption || "(sin caption)").slice(0, 200),
+    }));
 
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 8000,
       thinking: { type: "adaptive" },
       system: SYSTEM_PROMPT,
-      output_config: { format: { type: "json_schema", schema: SCHEMA } },
+      output_config: { format: { type: "json_schema", schema } },
       messages: [{ role: "user", content: `Clasificá estos posts:\n\n${JSON.stringify(list, null, 1)}` }],
     });
 
@@ -120,7 +119,7 @@ export async function classifyImportedPosts(log: (msg: string) => void = () => {
     }
 
     for (const [pillarId, ids] of idsByPillar) {
-      if (pillarId === importado.id) continue;
+      if (pillarId === importadoId) continue;
       await db.update(posts).set({ pillarId }).where(inArray(posts.id, ids));
       reclassified += ids.length;
       const label = allPillars.find((p) => p.id === pillarId)?.label;
@@ -128,5 +127,56 @@ export async function classifyImportedPosts(log: (msg: string) => void = () => {
     }
   }
 
+  return reclassified;
+}
+
+export async function classifyImportedPosts(log: (msg: string) => void = () => {}): Promise<{ reclassified: number; total: number }> {
+  const { allPillars, importado } = await ensureFallbackPillar(log);
+  const realPillarIds = allPillars.filter((p) => REAL_PILLAR_KEYS.includes(p.key)).map((p) => p.id);
+
+  // Cualquier post que no esté ya en uno de los 8 pilares reales es candidato,
+  // sea cual sea el pilar en el que haya quedado (no asumimos el nombre).
+  const targets =
+    realPillarIds.length > 0
+      ? await db.query.posts.findMany({
+          where: notInArray(posts.pillarId, realPillarIds),
+          columns: { id: true, caption: true, mediaType: true },
+        })
+      : await db.query.posts.findMany({ columns: { id: true, caption: true, mediaType: true } });
+
+  if (targets.length === 0) {
+    log("No hay posts para reclasificar — todos ya están en un pilar real.");
+    return { reclassified: 0, total: 0 };
+  }
+  log(`Reclasificando ${targets.length} post(s)...`);
+
+  const reclassified = await runClassification(targets, ALL_KEYS, allPillars, importado.id, log);
+  return { reclassified, total: targets.length };
+}
+
+// Corrige reels/videos que hayan quedado mal etiquetados como "post-grafico"
+// (pilar de formato, exclusivo para imágenes/carruseles).
+export async function fixMisclassifiedGraphics(log: (msg: string) => void = () => {}): Promise<{ reclassified: number; total: number }> {
+  const { allPillars, importado } = await ensureFallbackPillar(log);
+  const postGrafico = allPillars.find((p) => p.key === "post-grafico");
+  if (!postGrafico) {
+    log("No existe el pilar 'post-grafico'.");
+    return { reclassified: 0, total: 0 };
+  }
+
+  const targets = await db.query.posts.findMany({
+    where: and(eq(posts.pillarId, postGrafico.id), inArray(posts.mediaType, ["REELS", "VIDEO"])),
+    columns: { id: true, caption: true, mediaType: true },
+  });
+
+  if (targets.length === 0) {
+    log("No hay reels/videos mal etiquetados como 'post-grafico'.");
+    return { reclassified: 0, total: 0 };
+  }
+  log(`Corrigiendo ${targets.length} reel(s)/video(s) etiquetados como 'post-grafico'...`);
+
+  // Sin "post-grafico" como opción — obligamos a elegir un pilar de tema real o "importado"
+  const allowedKeys = ALL_KEYS.filter((k) => k !== "post-grafico");
+  const reclassified = await runClassification(targets, allowedKeys, allPillars, importado.id, log);
   return { reclassified, total: targets.length };
 }

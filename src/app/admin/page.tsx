@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { runMigration, runClassification } from "@/lib/admin/actions";
+import { runMigration, runClassification, runFixGraphics } from "@/lib/admin/actions";
 
 function ActionCard({
   title, description, buttonLabel, action,
@@ -69,6 +69,13 @@ export default function AdminPage() {
         description="Asigna un pilar de contenido (Labitconf, Granja, Dallas, etc.) a los posts importados de Instagram que todavía no tienen uno, según el caption. Correr después de aplicar la migración."
         buttonLabel="Clasificar con IA"
         action={runClassification}
+      />
+
+      <ActionCard
+        title="Corregir reels marcados como 'Post gráfico'"
+        description="'Post gráfico' es solo para imágenes/diseños estáticos. Esto mueve los reels y videos que quedaron ahí por error a un pilar de tema real."
+        buttonLabel="Corregir"
+        action={runFixGraphics}
       />
     </main>
   );
