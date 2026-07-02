@@ -1,8 +1,28 @@
 import { getAnalyticsRows } from "@/lib/analytics-data";
-import { weeklyReach, bestTimeHeatmap, hookRanking, median, DAY_LABELS, SLOT_LABELS } from "@/lib/insights";
+import { weeklyReach, bestTimeHeatmap, hookRanking, median, DAY_LABELS, SLOT_LABELS, type InsightRow } from "@/lib/insights";
+import { getConnectedAccount } from "@/lib/instagram/account-store";
+import { getMediaComments } from "@/lib/instagram/graph-api";
 
 function pct(n: number | null): string | null {
   return n != null ? `${(n * 100).toFixed(2)}%` : null;
+}
+
+// Comentarios reales de los posts destacados (top/bottom) — señal rica que
+// muestra qué le interesa a la audiencia. Se limita a estos pocos posts
+// para no pagar una llamada a la API por cada post del período.
+async function fetchCommentsFor(rows: InsightRow[]): Promise<Map<number, string[]>> {
+  const map = new Map<number, string[]>();
+  const account = await getConnectedAccount().catch(() => null);
+  if (!account) return map;
+
+  const withMediaId = rows.filter((r) => r.igMediaId);
+  await Promise.all(
+    withMediaId.map(async (r) => {
+      const comments = await getMediaComments(r.igMediaId!, account.accessToken, 10);
+      if (comments.length > 0) map.set(r.id, comments);
+    })
+  );
+  return map;
 }
 
 // Agregados de un período para mandarle al modelo — nunca el dataset crudo.
@@ -33,25 +53,36 @@ export async function buildAnalysisPayload(from: Date, to: Date) {
   const heatmap = bestTimeHeatmap(allRows);
   const weeks = weeklyReach(allRows, 8).filter((w) => w.medianReach != null);
 
-  const topPosts = [...rows]
+  const topRows = [...rows]
     .filter((r) => r.reach != null)
     .sort((a, b) => (rate(b.sharesCount, b.reach) ?? 0) - (rate(a.sharesCount, a.reach) ?? 0))
-    .slice(0, 5)
-    .map((r) => ({
-      caption: r.caption?.slice(0, 100),
-      tipo: r.mediaType,
-      alcance: r.reach,
-      share_rate: pct(rate(r.sharesCount, r.reach)),
-      save_rate: pct(rate(r.savedCount, r.reach)),
-      skip: r.skipRate,
-      seguidores_ganados: r.followsCount,
-    }));
+    .slice(0, 5);
 
-  const bottomPosts = [...rows]
+  const bottomRows = [...rows]
     .filter((r) => r.reach != null && r.reach > 0)
     .sort((a, b) => (a.reach ?? 0) - (b.reach ?? 0))
-    .slice(0, 3)
-    .map((r) => ({ caption: r.caption?.slice(0, 100), tipo: r.mediaType, alcance: r.reach, skip: r.skipRate }));
+    .slice(0, 3);
+
+  const commentsByPostId = await fetchCommentsFor([...topRows, ...bottomRows]);
+
+  const topPosts = topRows.map((r) => ({
+    caption: r.caption?.slice(0, 100),
+    tipo: r.mediaType,
+    alcance: r.reach,
+    share_rate: pct(rate(r.sharesCount, r.reach)),
+    save_rate: pct(rate(r.savedCount, r.reach)),
+    skip: r.skipRate,
+    seguidores_ganados: r.followsCount,
+    comentarios: commentsByPostId.get(r.id) ?? undefined,
+  }));
+
+  const bottomPosts = bottomRows.map((r) => ({
+    caption: r.caption?.slice(0, 100),
+    tipo: r.mediaType,
+    alcance: r.reach,
+    skip: r.skipRate,
+    comentarios: commentsByPostId.get(r.id) ?? undefined,
+  }));
 
   return {
     periodo: { desde: from.toISOString().slice(0, 10), hasta: to.toISOString().slice(0, 10) },

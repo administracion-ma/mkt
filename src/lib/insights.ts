@@ -3,6 +3,7 @@
 
 export type InsightRow = {
   id: number;
+  igMediaId?: string | null;
   publishedAt: string | null;
   mediaType: string;
   caption: string | null;

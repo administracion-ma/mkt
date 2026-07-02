@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "@/lib/env";
 import { buildAnalysisPayload, resolvePeriod } from "@/lib/analysis-payload";
+import { getBrandProfile } from "@/lib/brand/actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -15,6 +16,7 @@ Si te pasaron un informe previo, las preguntas son SOBRE ESE INFORME — respond
 Reglas:
 - Basate SOLO en los datos provistos. Si la pregunta no se puede responder con esos datos, decilo claramente en vez de inventar.
 - Priorizá las señales según el algoritmo de Instagram 2026: shares > guardados > comentarios > watch time > likes.
+- Los posts destacados traen comentarios reales cuando hay — usalos si la pregunta es sobre qué le interesa a la audiencia.
 - Respondé en español rioplatense, directo y concreto, sin relleno.
 - Respuesta corta: 2-5 oraciones salvo que la pregunta pida una lista.
 - Texto plano, sin markdown.`;
@@ -34,7 +36,7 @@ export async function POST(request: NextRequest) {
   const report: string | null = typeof body.report === "string" && body.report.trim() ? body.report : null;
 
   const { from, to } = resolvePeriod(body.from, body.to);
-  const payload = await buildAnalysisPayload(from, to);
+  const [payload, brandProfile] = await Promise.all([buildAnalysisPayload(from, to), getBrandProfile()]);
   if (!payload) {
     return NextResponse.json(
       { error: "No hay suficientes posts con métricas en el período para responder." },
@@ -45,8 +47,8 @@ export async function POST(request: NextRequest) {
   const client = new Anthropic({ apiKey: env.anthropicApiKey });
 
   const dataMessage = report
-    ? `Datos de Instagram de Coinbox Mining para el período:\n\n${JSON.stringify(payload, null, 1)}\n\nEste es el informe que ya generaste sobre este período:\n\n${report}`
-    : `Datos de Instagram de Coinbox Mining para el período:\n\n${JSON.stringify(payload, null, 1)}`;
+    ? `Ficha de marca:\n\n${brandProfile}\n\nDatos de Instagram de Coinbox Mining para el período:\n\n${JSON.stringify(payload, null, 1)}\n\nEste es el informe que ya generaste sobre este período:\n\n${report}`
+    : `Ficha de marca:\n\n${brandProfile}\n\nDatos de Instagram de Coinbox Mining para el período:\n\n${JSON.stringify(payload, null, 1)}`;
 
   const messages: Anthropic.MessageParam[] = [
     { role: "user", content: dataMessage },

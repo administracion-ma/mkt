@@ -368,3 +368,24 @@ export async function getMediaInsights(
 
   return result;
 }
+
+// Comentarios reales de un post — señal rica para entender qué le interesa
+// a la audiencia (preguntas, objeciones, interés). Solo lectura.
+export async function getMediaComments(
+  mediaId: string,
+  accessToken: string,
+  limit = 15
+): Promise<string[]> {
+  try {
+    const data = await graphGet<{ data: Array<{ text?: string }> }>(`/${mediaId}/comments`, {
+      fields: "text",
+      access_token: accessToken,
+    });
+    return data.data
+      .map((c) => c.text?.trim())
+      .filter((t): t is string => !!t)
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}

@@ -113,6 +113,14 @@ export const accountMetrics = pgTable("account_metrics", {
   mediaCount: integer("media_count"),
 });
 
+// Ficha de marca — texto libre editable desde /settings, se le manda a la IA
+// como contexto de negocio para que las recomendaciones sean específicas.
+export const brandProfile = pgTable("brand_profile", {
+  id: serial("id").primaryKey(),
+  content: text("content").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const analysisReports = pgTable("analysis_reports", {
   id: serial("id").primaryKey(),
   periodFrom: timestamp("period_from", { withTimezone: true }).notNull(),

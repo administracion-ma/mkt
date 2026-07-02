@@ -29,6 +29,7 @@ export async function getAnalyticsRows(from?: Date, to?: Date): Promise<InsightR
     const m = latest.get(p.id);
     return {
       id: p.id,
+      igMediaId: p.igMediaId ?? null,
       publishedAt: p.publishedAt ? p.publishedAt.toISOString() : null,
       mediaType: p.mediaType,
       caption: p.caption ?? null,
