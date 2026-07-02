@@ -71,9 +71,24 @@ export default async function AnalyticsPage({
       .catch(() => []),
   ]);
 
-  const lastReport = await db.query.analysisReports
+  // Resolvemos el mismo período default que usa /api/analyze (últimos 30 días si no hay filtro)
+  // para poder comparar contra periodFrom/periodTo del informe guardado.
+  const resolvedTo = toDate ?? new Date();
+  const resolvedFrom = fromDate ?? new Date(resolvedTo.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const lastReportAny = await db.query.analysisReports
     .findFirst({ orderBy: (r, { desc }) => [desc(r.createdAt)] })
     .catch(() => null);
+
+  // Solo lo mostramos si es del mismo período que se está viendo ahora —
+  // si no, es de otro filtro (7 días vs 30 días, etc.) y mostrarlo confunde.
+  const sameDay = (a: Date, b: Date) => a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
+  const lastReport =
+    lastReportAny &&
+    sameDay(lastReportAny.periodFrom, resolvedFrom) &&
+    sameDay(lastReportAny.periodTo, resolvedTo)
+      ? lastReportAny
+      : null;
 
   // Latest metrics snapshot per post
   const latestMetrics = new Map<number, typeof allMetrics[0]>();
@@ -171,6 +186,7 @@ export default async function AnalyticsPage({
       </div>
 
       <AnalysisPanel
+        key={`${from ?? "default"}-${to ?? "default"}`}
         initialSummary={lastReport?.summary ?? null}
         initialCreatedAt={lastReport?.createdAt ? lastReport.createdAt.toISOString() : null}
         from={from}
