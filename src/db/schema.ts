@@ -17,6 +17,27 @@ export const postStatusEnum = pgEnum("post_status", [
   "FAILED",
 ]);
 
+// Estado interno de producción del video/pieza (previo a publicar) — calca la planilla de Coinbox
+export const productionStatusEnum = pgEnum("production_status", [
+  "SIN_INICIAR",
+  "SIN_GRABAR",
+  "PROCESO",
+  "EDITADO",
+  "A_REVISAR",
+  "SUBIDO",
+]);
+
+// Canal/destino de distribución ("Detalle" en la planilla)
+export const channelEnum = pgEnum("channel", [
+  "SOLO_TIKTOK",
+  "VERTICAL",
+  "YOUTUBE",
+  "PAUTA",
+  "TODOS",
+]);
+
+export const formatEnum = pgEnum("format", ["VERTICAL", "HORIZONTAL"]);
+
 export const igAccounts = pgTable("ig_accounts", {
   id: serial("id").primaryKey(),
   igUserId: text("ig_user_id").notNull(),
@@ -28,6 +49,12 @@ export const igAccounts = pgTable("ig_accounts", {
 });
 
 export const pillars = pgTable("pillars", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  label: text("label").notNull(),
+});
+
+export const editors = pgTable("editors", {
   id: serial("id").primaryKey(),
   key: text("key").notNull().unique(),
   label: text("label").notNull(),
@@ -46,6 +73,12 @@ export const posts = pgTable("posts", {
   igPermalink: text("ig_permalink"),
   publishError: text("publish_error"),
   publishedAt: timestamp("published_at", { withTimezone: true }),
+  // Producción interna (planilla de Coinbox)
+  productionStatus: productionStatusEnum("production_status"),
+  channel: channelEnum("channel"),
+  format: formatEnum("format"),
+  editorId: integer("editor_id").references(() => editors.id),
+  rawFootageUrl: text("raw_footage_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

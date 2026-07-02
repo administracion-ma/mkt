@@ -1,6 +1,6 @@
 import { and, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
-import { posts, postMetrics, accountMetrics } from "@/db/schema";
+import { posts } from "@/db/schema";
 import { weeklyReach, bestTimeHeatmap, hookRanking } from "@/lib/insights";
 import { WeeklyReachChart, FollowersChart, BestTimeHeatmap, HookDiagnosis } from "@/components/InsightsPanels";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
@@ -44,8 +44,9 @@ export default async function AnalyticsPage({
     );
   }
 
+  const now = new Date();
   const tokenDaysLeft = Math.ceil(
-    (account.tokenExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    (account.tokenExpiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
   );
 
   const fromDate = from ? new Date(from + "T00:00:00") : undefined;

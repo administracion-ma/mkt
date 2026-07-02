@@ -1,6 +1,6 @@
 import { and, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
-import { posts, postMetrics } from "@/db/schema";
+import { posts } from "@/db/schema";
 import type { InsightRow } from "@/lib/insights";
 
 // Posts publicados + último snapshot de métricas por post.

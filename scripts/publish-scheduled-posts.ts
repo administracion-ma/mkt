@@ -2,7 +2,7 @@ import { and, eq, lte } from "drizzle-orm";
 import { db } from "../src/db/client";
 import { posts } from "../src/db/schema";
 import { getConnectedAccount } from "../src/lib/instagram/account-store";
-import { publishToInstagram } from "../src/lib/instagram/publish";
+import { publishPost } from "../src/lib/instagram/publish-post";
 
 async function main() {
   const account = await getConnectedAccount();
@@ -25,42 +25,12 @@ async function main() {
 
   for (const post of duePosts) {
     console.log(`-> Post #${post.id} (${post.mediaType})`);
-
-    await db
-      .update(posts)
-      .set({ status: "PUBLISHING", updatedAt: new Date() })
-      .where(eq(posts.id, post.id));
-
     try {
-      const { igMediaId, igPermalink } = await publishToInstagram({
-        igUserId: account.igUserId,
-        accessToken: account.accessToken,
-        mediaUrl: post.mediaUrl,
-        caption: post.caption,
-        mediaType: post.mediaType as "IMAGE" | "VIDEO" | "REELS",
-      });
-
-      await db
-        .update(posts)
-        .set({
-          status: "PUBLISHED",
-          igMediaId,
-          igPermalink,
-          publishedAt: new Date(),
-          publishError: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(posts.id, post.id));
-
-      console.log(`   OK -> ${igPermalink ?? igMediaId}`);
+      await publishPost(post, account);
+      console.log(`   OK`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error desconocido";
       console.error(`   FALLÓ: ${message}`);
-
-      await db
-        .update(posts)
-        .set({ status: "FAILED", publishError: message, updatedAt: new Date() })
-        .where(eq(posts.id, post.id));
     }
   }
 }
