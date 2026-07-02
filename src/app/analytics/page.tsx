@@ -8,8 +8,7 @@ import { getAccountSummary } from "@/lib/instagram/graph-api";
 import { PeriodFilter } from "@/components/PeriodFilter";
 import { PostCards, type PostCardRow } from "@/components/PostCards";
 import { SyncButton } from "@/components/SyncButton";
-import { AnalyzeButton } from "@/components/AnalyzeButton";
-import { AskAI } from "@/components/AskAI";
+import { AnalysisPanel } from "@/components/AnalysisPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -171,12 +170,12 @@ export default async function AnalyticsPage({
         <PeriodFilter />
       </div>
 
-      <AnalyzeButton
+      <AnalysisPanel
         initialSummary={lastReport?.summary ?? null}
         initialCreatedAt={lastReport?.createdAt ? lastReport.createdAt.toISOString() : null}
+        from={from}
+        to={to}
       />
-
-      <AskAI from={from} to={to} />
 
       {/* Account card */}
       <div className="card" style={{ marginBottom: "1.5rem" }}>

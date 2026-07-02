@@ -8,7 +8,9 @@ export const maxDuration = 120;
 
 const MODEL = "claude-opus-4-8";
 
-const SYSTEM_PROMPT = `Sos el analista de marketing de Coinbox Mining (venta y hosting de equipos de minería de criptomonedas, Argentina). Te hacen preguntas puntuales sobre las métricas de Instagram del período dado.
+const SYSTEM_PROMPT = `Sos el analista de marketing de Coinbox Mining (venta y hosting de equipos de minería de criptomonedas, Argentina). Te hacen preguntas puntuales o devoluciones sobre las métricas de Instagram del período dado.
+
+Si te pasaron un informe previo, las preguntas son SOBRE ESE INFORME — respondé haciendo referencia directa a lo que dijiste ahí (qué punto, qué dato). Si el usuario da una devolución o no está de acuerdo con algo del informe, tomala en serio: reconsiderá el punto con los datos que tenés y si tiene razón, decilo. No te pongas a la defensiva.
 
 Reglas:
 - Basate SOLO en los datos provistos. Si la pregunta no se puede responder con esos datos, decilo claramente en vez de inventar.
@@ -29,6 +31,7 @@ export async function POST(request: NextRequest) {
   const history: { question: string; answer: string }[] = Array.isArray(body.history)
     ? body.history.slice(-MAX_HISTORY)
     : [];
+  const report: string | null = typeof body.report === "string" && body.report.trim() ? body.report : null;
 
   const { from, to } = resolvePeriod(body.from, body.to);
   const payload = await buildAnalysisPayload(from, to);
@@ -41,11 +44,12 @@ export async function POST(request: NextRequest) {
 
   const client = new Anthropic({ apiKey: env.anthropicApiKey });
 
+  const dataMessage = report
+    ? `Datos de Instagram de Coinbox Mining para el período:\n\n${JSON.stringify(payload, null, 1)}\n\nEste es el informe que ya generaste sobre este período:\n\n${report}`
+    : `Datos de Instagram de Coinbox Mining para el período:\n\n${JSON.stringify(payload, null, 1)}`;
+
   const messages: Anthropic.MessageParam[] = [
-    {
-      role: "user",
-      content: `Datos de Instagram de Coinbox Mining para el período:\n\n${JSON.stringify(payload, null, 1)}`,
-    },
+    { role: "user", content: dataMessage },
     { role: "assistant", content: "Listo, tengo los datos del período. Preguntame." },
   ];
   for (const h of history) {
