@@ -1,5 +1,16 @@
+import { db } from "@/db/client";
 import { getAnalyticsRows } from "@/lib/analytics-data";
-import { weeklyReach, bestTimeHeatmap, hookRanking, median, DAY_LABELS, SLOT_LABELS, type InsightRow } from "@/lib/insights";
+import {
+  weeklyReach,
+  bestTimeHeatmap,
+  hookRanking,
+  pillarPerformance,
+  hashtagPerformance,
+  median,
+  DAY_LABELS,
+  SLOT_LABELS,
+  type InsightRow,
+} from "@/lib/insights";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
 import { getMediaComments } from "@/lib/instagram/graph-api";
 
@@ -53,6 +64,11 @@ export async function buildAnalysisPayload(from: Date, to: Date) {
   const heatmap = bestTimeHeatmap(allRows);
   const weeks = weeklyReach(allRows, 8).filter((w) => w.medianReach != null);
 
+  // Ranking de pilares sobre todo el histórico (más muestra, comparación más confiable)
+  const allPillars = await db.query.pillars.findMany();
+  const pillarStats = pillarPerformance(allRows, allPillars);
+  const hashtagStats = hashtagPerformance(rows);
+
   const topRows = [...rows]
     .filter((r) => r.reach != null)
     .sort((a, b) => (rate(b.sharesCount, b.reach) ?? 0) - (rate(a.sharesCount, a.reach) ?? 0))
@@ -99,6 +115,20 @@ export async function buildAnalysisPayload(from: Date, to: Date) {
     alcance_semanal_historico: weeks.map((w) => ({ semana: w.weekStart, mediana: w.medianReach, posts: w.count })),
     top_5_posts_por_share_rate: topPosts,
     peores_3_por_alcance: bottomPosts,
+    ranking_pilares: pillarStats.map((s) => ({
+      pilar: s.label,
+      posts: s.posts,
+      alcance_mediano: s.alcanceMediano,
+      er_mediana: pct(s.erMediana),
+      guardado_mediano: pct(s.saveRateMediana),
+      share_mediano: pct(s.shareRateMediana),
+    })),
+    hashtags_destacados: hashtagStats.slice(0, 8).map((h) => ({
+      hashtag: h.tag,
+      posts: h.posts,
+      alcance_mediano: h.alcanceMediano,
+      share_mediano: pct(h.shareRateMediana),
+    })),
   };
 }
 

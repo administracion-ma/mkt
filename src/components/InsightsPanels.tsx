@@ -1,4 +1,4 @@
-import type { HeatCell, HookPost, WeekPoint } from "@/lib/insights";
+import type { HeatCell, HookPost, WeekPoint, PillarStat, HashtagStat } from "@/lib/insights";
 import { DAY_LABELS, SLOT_LABELS } from "@/lib/insights";
 
 // Color de marca ajustado a la banda de luminosidad para modo oscuro
@@ -258,6 +258,107 @@ export function HookDiagnosis({ best, worst, medianSkip }: { best: HookPost[]; w
         Peores ganchos
       </div>
       {worst.map((p) => <HookItem key={p.id} post={p} good={false} />)}
+    </div>
+  );
+}
+
+// ── Ranking de pilares de contenido ───────────────────────────────────────────
+export function PillarLeaderboard({ stats }: { stats: PillarStat[] }) {
+  if (stats.length === 0) {
+    return (
+      <div className="card">
+        <PanelTitle hint="Necesita al menos 3 posts por pilar en el período para comparar de forma justa">
+          Ranking de pilares
+        </PanelTitle>
+        <p style={{ fontSize: "0.75rem", color: "var(--text-tertiary)" }}>
+          Todavía no hay suficientes posts clasificados por pilar en este período.
+        </p>
+      </div>
+    );
+  }
+
+  const maxER = Math.max(...stats.map((s) => s.erMediana ?? 0), 0.0001);
+
+  return (
+    <div className="card">
+      <PanelTitle hint="Ordenado por Engagement Rate mediano · mínimo 3 posts por pilar">
+        Ranking de pilares
+      </PanelTitle>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        {stats.map((s, i) => {
+          const pct = Math.max(4, ((s.erMediana ?? 0) / maxER) * 100);
+          return (
+            <div key={s.pillarId}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 3 }}>
+                <span style={{ fontSize: "0.8rem", fontWeight: 700, color: i === 0 ? "var(--accent)" : "var(--text)" }}>
+                  {i === 0 ? "🏆 " : ""}{s.label}
+                </span>
+                <span style={{ fontSize: "0.68rem", color: "var(--text-tertiary)" }}>
+                  {s.posts} posts · alcance mediano {fmt(s.alcanceMediano)}
+                </span>
+              </div>
+              <div style={{ height: 8, borderRadius: 4, background: "var(--surface2)", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${pct}%`, background: i === 0 ? "var(--accent)" : MARK, borderRadius: 4 }} />
+              </div>
+              <div style={{ display: "flex", gap: "1rem", marginTop: 4, fontSize: "0.65rem", color: "var(--text-tertiary)" }}>
+                <span>ER {s.erMediana != null ? `${(s.erMediana * 100).toFixed(1)}%` : "—"}</span>
+                <span>Guard. {s.saveRateMediana != null ? `${(s.saveRateMediana * 100).toFixed(2)}%` : "—"}</span>
+                <span>Share {s.shareRateMediana != null ? `${(s.shareRateMediana * 100).toFixed(2)}%` : "—"}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Rendimiento de hashtags ───────────────────────────────────────────────────
+export function HashtagPerformance({ stats }: { stats: HashtagStat[] }) {
+  if (stats.length === 0) {
+    return (
+      <div className="card">
+        <PanelTitle hint="Necesita el mismo hashtag repetido en 2+ posts para comparar">
+          Rendimiento de hashtags
+        </PanelTitle>
+        <p style={{ fontSize: "0.75rem", color: "var(--text-tertiary)" }}>
+          No se encontraron hashtags repetidos en los captions de este período.
+        </p>
+      </div>
+    );
+  }
+
+  const maxReach = Math.max(...stats.map((s) => s.alcanceMediano ?? 0), 1);
+
+  return (
+    <div className="card">
+      <PanelTitle hint="Hashtags usados en 2+ posts, ordenados por alcance mediano">
+        Rendimiento de hashtags
+      </PanelTitle>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        {stats.map((s) => {
+          const pct = Math.max(4, ((s.alcanceMediano ?? 0) / maxReach) * 100);
+          return (
+            <div key={s.tag} style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+              <span
+                style={{
+                  fontSize: "0.74rem", color: "var(--accent)", minWidth: 110, maxWidth: 110,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}
+                title={s.tag}
+              >
+                {s.tag}
+              </span>
+              <div style={{ flex: 1, height: 6, borderRadius: 3, background: "var(--surface2)", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${pct}%`, background: MARK, borderRadius: 3 }} />
+              </div>
+              <span style={{ fontSize: "0.63rem", color: "var(--text-tertiary)", minWidth: 92, textAlign: "right" }}>
+                {fmt(s.alcanceMediano)} · {s.posts}p
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

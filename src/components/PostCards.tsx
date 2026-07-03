@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 
 export type PostCardRow = {
   id: number;
+  pillarId?: number | null;
   publishedAt: string | null;
   mediaType: string;
   caption: string | null;

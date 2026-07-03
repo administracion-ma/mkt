@@ -4,6 +4,7 @@
 export type InsightRow = {
   id: number;
   igMediaId?: string | null;
+  pillarId?: number | null;
   publishedAt: string | null;
   mediaType: string;
   caption: string | null;
@@ -26,6 +27,16 @@ export function median(values: number[]): number | null {
   const s = [...values].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
   return s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m];
+}
+
+export function rate(num: number | null | undefined, denom: number | null | undefined): number | null {
+  if (!denom || num == null) return null;
+  return num / denom;
+}
+
+function engagementRate(r: InsightRow): number | null {
+  if (!r.reach) return null;
+  return ((r.likeCount ?? 0) + (r.commentCount ?? 0) + (r.savedCount ?? 0) + (r.sharesCount ?? 0)) / r.reach;
 }
 
 // ── Alcance por semana (últimas N semanas, lunes a domingo) ──────────────────
@@ -127,4 +138,86 @@ export function hookRanking(rows: InsightRow[]): {
     worst: videos.slice(-3).reverse(),
     medianSkip: median(videos.map((v) => v.skipRate)),
   };
+}
+
+// ── Ranking de pilares de contenido ───────────────────────────────────────────
+export type PillarStat = {
+  pillarId: number;
+  label: string;
+  posts: number;
+  alcanceMediano: number | null;
+  erMediana: number | null;
+  saveRateMediana: number | null;
+  shareRateMediana: number | null;
+};
+
+// Mínimo de posts para que un pilar entre al ranking — evita que un pilar con
+// 1 post viral parezca "el mejor" por pura casualidad.
+const MIN_POSTS_FOR_RANKING = 3;
+
+export function pillarPerformance(
+  rows: InsightRow[],
+  pillars: { id: number; label: string }[]
+): PillarStat[] {
+  const byPillar = new Map<number, InsightRow[]>();
+  for (const r of rows) {
+    if (r.pillarId == null || r.reach == null) continue;
+    (byPillar.get(r.pillarId) ?? byPillar.set(r.pillarId, []).get(r.pillarId)!).push(r);
+  }
+
+  const stats: PillarStat[] = [];
+  for (const pillar of pillars) {
+    const rs = byPillar.get(pillar.id) ?? [];
+    if (rs.length < MIN_POSTS_FOR_RANKING) continue;
+    stats.push({
+      pillarId: pillar.id,
+      label: pillar.label,
+      posts: rs.length,
+      alcanceMediano: median(rs.map((r) => r.reach).filter((v): v is number => v != null)),
+      erMediana: median(rs.map(engagementRate).filter((v): v is number => v != null)),
+      saveRateMediana: median(rs.map((r) => rate(r.savedCount, r.reach)).filter((v): v is number => v != null)),
+      shareRateMediana: median(rs.map((r) => rate(r.sharesCount, r.reach)).filter((v): v is number => v != null)),
+    });
+  }
+
+  return stats.sort((a, b) => (b.erMediana ?? 0) - (a.erMediana ?? 0));
+}
+
+// ── Rendimiento de hashtags ───────────────────────────────────────────────────
+export type HashtagStat = {
+  tag: string;
+  posts: number;
+  alcanceMediano: number | null;
+  shareRateMediana: number | null;
+};
+
+const MIN_POSTS_FOR_HASHTAG = 2;
+
+function extractHashtags(caption: string | null): string[] {
+  if (!caption) return [];
+  const matches = caption.match(/#[\p{L}0-9_]+/gu) ?? [];
+  return Array.from(new Set(matches.map((h) => h.toLowerCase())));
+}
+
+export function hashtagPerformance(rows: InsightRow[]): HashtagStat[] {
+  const byTag = new Map<string, InsightRow[]>();
+  for (const r of rows) {
+    if (r.reach == null) continue;
+    for (const tag of extractHashtags(r.caption)) {
+      (byTag.get(tag) ?? byTag.set(tag, []).get(tag)!).push(r);
+    }
+  }
+
+  const stats: HashtagStat[] = [];
+  for (const [tag, rs] of byTag) {
+    if (rs.length < MIN_POSTS_FOR_HASHTAG) continue;
+    stats.push({
+      tag,
+      posts: rs.length,
+      alcanceMediano: median(rs.map((r) => r.reach).filter((v): v is number => v != null)),
+      shareRateMediana: median(rs.map((r) => rate(r.sharesCount, r.reach)).filter((v): v is number => v != null)),
+    });
+  }
+
+  return stats.sort((a, b) => (b.alcanceMediano ?? 0) - (a.alcanceMediano ?? 0)).slice(0, 15);
 }

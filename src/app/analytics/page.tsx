@@ -1,8 +1,8 @@
 import { and, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
 import { posts } from "@/db/schema";
-import { weeklyReach, bestTimeHeatmap, hookRanking } from "@/lib/insights";
-import { WeeklyReachChart, FollowersChart, BestTimeHeatmap, HookDiagnosis } from "@/components/InsightsPanels";
+import { weeklyReach, bestTimeHeatmap, hookRanking, pillarPerformance, hashtagPerformance } from "@/lib/insights";
+import { WeeklyReachChart, FollowersChart, BestTimeHeatmap, HookDiagnosis, PillarLeaderboard, HashtagPerformance } from "@/components/InsightsPanels";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
 import { getAccountSummary } from "@/lib/instagram/graph-api";
 import { PeriodFilter } from "@/components/PeriodFilter";
@@ -54,7 +54,7 @@ export default async function AnalyticsPage({
 
   const summary = await getAccountSummary(account.igUserId, account.accessToken).catch(() => null);
 
-  const [publishedPosts, allMetrics, accountHistory] = await Promise.all([
+  const [publishedPosts, allMetrics, accountHistory, allPillars] = await Promise.all([
     db.query.posts.findMany({
       where: and(
         eq(posts.status, "PUBLISHED"),
@@ -70,6 +70,7 @@ export default async function AnalyticsPage({
     db.query.accountMetrics
       .findMany({ orderBy: (a, { asc }) => [asc(a.capturedAt)] })
       .catch(() => []),
+    db.query.pillars.findMany(),
   ]);
 
   // Resolvemos el mismo período default que usa /api/analyze (últimos 30 días si no hay filtro)
@@ -102,6 +103,7 @@ export default async function AnalyticsPage({
     const m = latestMetrics.get(p.id);
     return {
       id: p.id,
+      pillarId: p.pillarId ?? null,
       publishedAt: p.publishedAt ? p.publishedAt.toISOString() : null,
       mediaType: p.mediaType,
       caption: p.caption ?? null,
@@ -163,6 +165,8 @@ export default async function AnalyticsPage({
   const weekPoints = weeklyReach(rows);
   const heatmap = bestTimeHeatmap(rows);
   const hooks = hookRanking(rows);
+  const pillarStats = pillarPerformance(rows, allPillars);
+  const hashtagStats = hashtagPerformance(rows);
   const followerPoints = accountHistory
     .filter((a) => a.followersCount != null)
     .map((a) => ({ date: a.capturedAt.toISOString(), followers: a.followersCount! }));
@@ -278,6 +282,8 @@ export default async function AnalyticsPage({
         <FollowersChart points={followerPoints} />
         <BestTimeHeatmap cells={heatmap.cells} best={heatmap.best} />
         <HookDiagnosis best={hooks.best} worst={hooks.worst} medianSkip={hooks.medianSkip} />
+        <PillarLeaderboard stats={pillarStats} />
+        <HashtagPerformance stats={hashtagStats} />
       </div>
 
       {/* Posts cards */}

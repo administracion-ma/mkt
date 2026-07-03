@@ -21,6 +21,7 @@ Reglas:
 - Tenés una herramienta de búsqueda web: usala con moderación (2-3 búsquedas como mucho) solo si aporta algo concreto — un cambio reciente del algoritmo de Instagram, una tendencia de formato que valga la pena probar. No la uses si no hace falta.
 - Si te paso el informe de la semana anterior, hacé seguimiento explícito: si una acción que sugeriste se ve reflejada en los datos nuevos, decilo; si no, notalo.
 - Los posts destacados traen comentarios reales cuando hay. Son la señal más directa de qué le interesa a la audiencia — si ves un patrón (preguntas repetidas, objeciones, pedidos), usalo para la hipótesis o las acciones.
+- Tenés un ranking de pilares de contenido (ranking_pilares, sobre todo el histórico) y hashtags destacados (hashtags_destacados). Usalos para las acciones: si un pilar rinde mucho mejor que otros, sugerí postear más de eso; si un hashtag se repite entre los de mejor alcance, sugerí seguir usándolo.
 
 Estructura fija del informe (usá exactamente estos títulos, sin markdown, solo texto plano con emojis):
 📊 RESUMEN — 2-3 oraciones sobre el estado general del período.
