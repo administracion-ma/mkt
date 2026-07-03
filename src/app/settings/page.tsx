@@ -1,5 +1,6 @@
 import { getBrandProfile, saveBrandProfile } from "@/lib/brand/actions";
 
+// Ficha de marca: texto libre editable, sirve de contexto de negocio para la IA.
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
