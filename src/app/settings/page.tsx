@@ -1,6 +1,6 @@
-import { getBrandProfile, saveBrandProfile } from "@/lib/brand/actions";
+import { getBrandProfile } from "@/lib/brand/actions";
+import { BrandProfileForm } from "@/components/BrandProfileForm";
 
-// Ficha de marca: texto libre editable, sirve de contexto de negocio para la IA.
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
@@ -15,22 +15,7 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <form action={saveBrandProfile} className="card">
-        <label>
-          <span className="form-label">Contale a la IA sobre el negocio</span>
-          <textarea
-            name="content"
-            defaultValue={content}
-            rows={16}
-            className="form-input"
-            style={{ resize: "vertical", lineHeight: 1.6, fontFamily: "inherit" }}
-            placeholder="Qué vende Coinbox, quién es el público, qué tono usar, promociones activas…"
-          />
-        </label>
-        <button type="submit" className="btn btn-primary" style={{ marginTop: "1rem" }}>
-          Guardar
-        </button>
-      </form>
+      <BrandProfileForm initialContent={content} />
     </main>
   );
 }
