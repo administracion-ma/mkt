@@ -6,15 +6,25 @@ import { useRouter } from "next/navigation";
 export function SyncButton({ lastSyncAt }: { lastSyncAt: string | null }) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
   const router = useRouter();
 
   async function handleSync() {
     setSyncing(true);
     setError(null);
+    setResult(null);
     try {
       const res = await fetch("/api/sync/recent", { method: "POST" });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Error al sincronizar");
+
+      if (body.synced === 0 && body.errors?.length > 0) {
+        setError(`No se pudo sincronizar ningún post: ${body.errors[0]}`);
+      } else if (body.errors?.length > 0) {
+        setResult(`${body.synced}/${body.total} posts sincronizados (${body.errors.length} con error)`);
+      } else {
+        setResult(`${body.synced}/${body.total} posts sincronizados`);
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al sincronizar");
@@ -51,6 +61,7 @@ export function SyncButton({ lastSyncAt }: { lastSyncAt: string | null }) {
       >
         {syncing ? "Sincronizando…" : "↻ Sincronizar ahora"}
       </button>
+      {result && <span style={{ fontSize: "0.7rem", color: "#22c55e" }}>{result}</span>}
       {error && <span style={{ fontSize: "0.7rem", color: "var(--danger)" }}>{error}</span>}
       <span
         title="El botón actualiza los 10 posts más recientes al instante. El resto se actualiza automáticamente 3 veces por día."
