@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { PostCardRow } from "./PostCards";
-import { fmt, er, TYPE_COLOR, TYPE_ICON, TYPE_LABEL } from "./PostCards";
+import type { PostCardRow, Benchmark } from "./PostCards";
+import { fmt, fmtSec, er, rate, bm, BM_COLOR, isVideo, useAlgoScores, TYPE_COLOR, TYPE_ICON, TYPE_LABEL } from "./PostCards";
 
 // Monta el <video>/<img> recién cuando el tile entra en pantalla (+ margen) —
 // con 30-60 posts en la grilla, cargar todo de una sería un montón de pedidos
@@ -27,14 +27,26 @@ function useInView<T extends HTMLElement>(rootMargin = "400px") {
   return { ref, inView };
 }
 
-function ReelTile({ row }: { row: PostCardRow }) {
+function MiniStat({ label, value, level }: { label: string; value: string; level?: "top" | "typical" | "low" }) {
+  return (
+    <div className="reel-tile-mini-stat">
+      <span className="reel-tile-mini-value" style={{ color: level ? BM_COLOR[level] : "var(--text)" }}>{value}</span>
+      <span className="reel-tile-mini-label">{label}</span>
+    </div>
+  );
+}
+
+function ReelTile({ row, bd, score }: { row: PostCardRow; bd: Benchmark | null; score: number | null }) {
   const { ref, inView } = useInView<HTMLDivElement>();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
-  const isVideo = row.mediaType === "REELS" || row.mediaType === "VIDEO";
+  const video = isVideo(row);
   const color = TYPE_COLOR[row.mediaType] ?? "#6b7280";
   const erVal = er(row);
+  const srVal = rate(row.savedCount, row.reach);
+  const shrVal = rate(row.sharesCount, row.reach);
+  const crVal = rate(row.commentCount, row.reach);
 
   function toggle() {
     const v = videoRef.current;
@@ -55,11 +67,11 @@ function ReelTile({ row }: { row: PostCardRow }) {
     <div ref={ref} className="reel-tile">
       <div
         className="reel-tile-media"
-        onClick={isVideo ? toggle : undefined}
-        style={{ cursor: isVideo ? "pointer" : "default" }}
+        onClick={video ? toggle : undefined}
+        style={{ cursor: video ? "pointer" : "default" }}
       >
         {inView && src && !failed ? (
-          isVideo ? (
+          video ? (
             <video
               ref={videoRef}
               src={src}
@@ -80,13 +92,26 @@ function ReelTile({ row }: { row: PostCardRow }) {
           </div>
         )}
 
-        {isVideo && inView && !failed && !playing && (
+        {video && inView && !failed && !playing && (
           <div className="reel-tile-play-btn">▶</div>
         )}
 
         <span className="reel-tile-badge" style={{ color, borderColor: `${color}55`, background: "rgba(10,10,10,0.72)" }}>
           {TYPE_LABEL[row.mediaType] ?? row.mediaType}
         </span>
+
+        {score != null && (
+          <span
+            className="reel-tile-score"
+            style={{
+              color: score >= 70 ? "#22c55e" : score >= 45 ? "#9ca3af" : "#ef4444",
+              borderColor: score >= 70 ? "rgba(34,197,94,0.4)" : score >= 45 ? "rgba(156,163,175,0.35)" : "rgba(239,68,68,0.4)",
+            }}
+            title="Score de algoritmo vs tus últimos posts del mismo tipo"
+          >
+            {score}
+          </span>
+        )}
 
         {row.igPermalink && (
           <a
@@ -119,16 +144,37 @@ function ReelTile({ row }: { row: PostCardRow }) {
             </>
           )}
         </div>
+
+        <div className="reel-tile-mini-grid">
+          <MiniStat label="Guard." value={fmt(row.savedCount)} level={bd ? bm(srVal, bd.sr) : undefined} />
+          <MiniStat label="Shares" value={fmt(row.sharesCount)} level={bd ? bm(shrVal, bd.shr) : undefined} />
+          <MiniStat label="Coment." value={fmt(row.commentCount)} level={bd ? bm(crVal, bd.cr) : undefined} />
+          {video && (
+            <>
+              <MiniStat label="Watch" value={fmtSec(row.avgWatchTimeMs)} level={bd ? bm(row.avgWatchTimeMs, bd.watch) : undefined} />
+              {row.skipRate != null && (
+                <MiniStat label="Skip%" value={`${row.skipRate.toFixed(0)}%`} level={bd ? bm(row.skipRate, bd.skip, true) : undefined} />
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 export function ReelsGrid({ rows }: { rows: PostCardRow[] }) {
+  const { benchmarkByType, scoreMap } = useAlgoScores(rows);
+
   return (
     <div className="reels-grid">
       {rows.map((row) => (
-        <ReelTile key={row.id} row={row} />
+        <ReelTile
+          key={row.id}
+          row={row}
+          bd={isVideo(row) ? benchmarkByType.video : benchmarkByType.image}
+          score={scoreMap.get(row.id) ?? null}
+        />
       ))}
     </div>
   );

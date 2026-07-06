@@ -32,7 +32,7 @@ export function fmt(n: number | null | undefined): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
 }
-function fmtSec(ms: number | null | undefined): string {
+export function fmtSec(ms: number | null | undefined): string {
   if (ms == null) return "—";
   const s = ms / 1000;
   return s >= 60 ? `${Math.floor(s / 60)}m${Math.round(s % 60)}s` : `${s.toFixed(1)}s`;
@@ -71,6 +71,57 @@ function sortValue(r: PostCardRow, key: SortKey, scoreMap?: Map<number, number>)
     case "shares": return r.sharesCount ?? -1;
     case "plays":  return r.plays ?? -1;
   }
+}
+
+export type Benchmark = {
+  reach: number; er: number; sr: number; lr: number; cr: number;
+  shr: number; watch: number; play: number; skip: number; shares: number;
+};
+
+export const isVideo = (r: PostCardRow) => r.mediaType === "REELS" || r.mediaType === "VIDEO";
+
+// Benchmark contra los últimos 10 posts DEL MISMO TIPO (igual que Instagram Edits: solo reels vs reels).
+// Compartido entre la lista de detalle y la grilla para que el Score/benchmark sea el mismo en las dos vistas.
+export function useAlgoScores(rows: PostCardRow[]): { benchmarkByType: { video: Benchmark | null; image: Benchmark | null }; scoreMap: Map<number, number> } {
+  const benchmarkByType = useMemo(() => {
+    const makePool = (filter: (r: PostCardRow) => boolean): Benchmark | null => {
+      const pool = [...rows]
+        .filter(r => r.publishedAt != null && filter(r))
+        .sort((a, b) => (b.publishedAt! > a.publishedAt! ? 1 : -1))
+        .slice(0, 10);
+      if (pool.length < 3) return null;
+      const nums = (fn: (r: PostCardRow) => number | null) =>
+        pool.map(fn).filter((v): v is number => v != null);
+      return {
+        reach:   median(nums(r => r.reach)),
+        er:      median(nums(r => er(r))),
+        sr:      median(nums(r => rate(r.savedCount, r.reach))),
+        lr:      median(nums(r => rate(r.likeCount, r.reach))),
+        cr:      median(nums(r => rate(r.commentCount, r.reach))),
+        shr:     median(nums(r => rate(r.sharesCount, r.reach))),
+        watch:   median(nums(r => r.avgWatchTimeMs)),
+        play:    median(nums(r => rate(r.plays, r.reach))),
+        skip:    median(nums(r => r.skipRate)),
+        shares:  median(nums(r => r.sharesCount)),
+      };
+    };
+    return {
+      video: makePool(r => isVideo(r)),
+      image: makePool(r => r.mediaType === "IMAGE" || r.mediaType === "CAROUSEL_ALBUM"),
+    };
+  }, [rows]);
+
+  const scoreMap = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const r of rows) {
+      const bd = isVideo(r) ? benchmarkByType.video : benchmarkByType.image;
+      const s = algoScore(r, bd, isVideo(r));
+      if (s != null) m.set(r.id, s);
+    }
+    return m;
+  }, [rows, benchmarkByType]);
+
+  return { benchmarkByType, scoreMap };
 }
 
 // ── Algorithm Score ───────────────────────────────────────────────────────────
@@ -118,7 +169,7 @@ function algoScore(
 // Compara contra el promedio propio: ±30% define "típico".
 // Así no se fuerza que siempre el 25% quede en rojo/verde —
 // si todos los posts andan bien, la mayoría queda en gris.
-type BmLevel = "top" | "typical" | "low";
+export type BmLevel = "top" | "typical" | "low";
 
 function median(values: number[]): number {
   if (!values.length) return 0;
@@ -128,14 +179,14 @@ function median(values: number[]): number {
 }
 
 // invert=true: menor es mejor (ej. skip rate)
-function bm(value: number | null, med: number, invert = false): BmLevel | undefined {
+export function bm(value: number | null, med: number, invert = false): BmLevel | undefined {
   if (value == null || med === 0) return undefined;
   const ratio = value / med;
   if (invert) return ratio <= 0.7 ? "top" : ratio >= 1.3 ? "low" : "typical";
   return ratio >= 1.3 ? "top" : ratio <= 0.7 ? "low" : "typical";
 }
 const BM_LABEL: Record<BmLevel, string> = { top: "Valor más alto", typical: "Valor típico", low: "Valor más bajo" };
-const BM_COLOR: Record<BmLevel, string> = { top: "#22c55e", typical: "#6b7280", low: "#ef4444" };
+export const BM_COLOR: Record<BmLevel, string> = { top: "#22c55e", typical: "#6b7280", low: "#ef4444" };
 
 // ── Stat chip ─────────────────────────────────────────────────────────────────
 function Stat({ label, value, accent, tooltip, benchmark }: {
@@ -286,48 +337,7 @@ function Thumbnail({ row }: { row: PostCardRow }) {
 // ── Main component ────────────────────────────────────────────────────────────
 export function PostCards({ rows }: { rows: PostCardRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("date");
-
-  // Benchmark contra los últimos 10 posts DEL MISMO TIPO (igual que Instagram Edits: solo reels vs reels)
-  const benchmarkByType = useMemo(() => {
-    const makePool = (filter: (r: PostCardRow) => boolean) => {
-      const pool = [...rows]
-        .filter(r => r.publishedAt != null && filter(r))
-        .sort((a, b) => (b.publishedAt! > a.publishedAt! ? 1 : -1))
-        .slice(0, 10);
-      if (pool.length < 3) return null;
-      const nums = (fn: (r: PostCardRow) => number | null) =>
-        pool.map(fn).filter((v): v is number => v != null);
-      return {
-        reach:   median(nums(r => r.reach)),
-        er:      median(nums(r => er(r))),
-        sr:      median(nums(r => rate(r.savedCount, r.reach))),
-        lr:      median(nums(r => rate(r.likeCount, r.reach))),
-        cr:      median(nums(r => rate(r.commentCount, r.reach))),
-        shr:     median(nums(r => rate(r.sharesCount, r.reach))),
-        watch:   median(nums(r => r.avgWatchTimeMs)),
-        play:    median(nums(r => rate(r.plays, r.reach))),
-        skip:    median(nums(r => r.skipRate)),
-        shares:  median(nums(r => r.sharesCount)),
-      };
-    };
-    return {
-      video: makePool(r => r.mediaType === "REELS" || r.mediaType === "VIDEO"),
-      image: makePool(r => r.mediaType === "IMAGE" || r.mediaType === "CAROUSEL_ALBUM"),
-    };
-  }, [rows]);
-
-  const isVideo = (r: PostCardRow) => r.mediaType === "REELS" || r.mediaType === "VIDEO";
-
-  // Pre-compute scores for all rows (needed for sort)
-  const scoreMap = useMemo(() => {
-    const m = new Map<number, number>();
-    for (const r of rows) {
-      const bd = isVideo(r) ? benchmarkByType.video : benchmarkByType.image;
-      const s = algoScore(r, bd, isVideo(r));
-      if (s != null) m.set(r.id, s);
-    }
-    return m;
-  }, [rows, benchmarkByType]);
+  const { benchmarkByType, scoreMap } = useAlgoScores(rows);
 
   const sorted = useMemo(
     () => [...rows].sort((a, b) => sortValue(b, sortKey, scoreMap) - sortValue(a, sortKey, scoreMap)),
