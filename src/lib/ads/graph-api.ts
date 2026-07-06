@@ -215,7 +215,14 @@ export async function getDailyAdInsights(
 export async function getFreshCreativeThumbnail(creativeId: string, accessToken: string): Promise<string | null> {
   const data = await adsGet<{ thumbnail_url?: string }>(
     `/${creativeId}`,
-    { fields: "thumbnail_url", access_token: accessToken },
+    {
+      fields: "thumbnail_url",
+      // Sin esto Meta devuelve una miniatura chica (pensada para listados,
+      // no para un preview grande) — se pide explícitamente a mayor resolución.
+      thumbnail_width: "640",
+      thumbnail_height: "640",
+      access_token: accessToken,
+    },
     1800
   );
   return data.thumbnail_url ?? null;
