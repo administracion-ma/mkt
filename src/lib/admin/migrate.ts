@@ -140,6 +140,12 @@ export async function applyMigration(): Promise<void> {
   `);
 
   await db.execute(sql`
+    ALTER TABLE ad_insights
+      ADD COLUMN IF NOT EXISTS messages integer,
+      ADD COLUMN IF NOT EXISTS actions jsonb;
+  `);
+
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS ads (
       id serial PRIMARY KEY,
       ad_id text NOT NULL UNIQUE,
@@ -172,5 +178,11 @@ export async function applyMigration(): Promise<void> {
       captured_at timestamptz NOT NULL DEFAULT now(),
       UNIQUE(ad_id, date)
     );
+  `);
+
+  await db.execute(sql`
+    ALTER TABLE ad_creative_insights
+      ADD COLUMN IF NOT EXISTS messages integer,
+      ADD COLUMN IF NOT EXISTS actions jsonb;
   `);
 }

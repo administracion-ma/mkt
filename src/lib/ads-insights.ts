@@ -16,6 +16,7 @@ export type AdInsightRow = {
   clicks: number | null;
   linkClicks: number | null;
   results: number | null;
+  messages: number | null;
 };
 
 export type DaySpendPoint = { date: string; spend: number; impressions: number; clicks: number };
@@ -41,6 +42,7 @@ export type CampaignSummary = {
   impressions: number;
   clicks: number;
   results: number;
+  messages: number;
   ctr: number | null; // %
   cpc: number | null;
   cpm: number | null;
@@ -59,6 +61,7 @@ export function campaignSummaries(rows: AdInsightRow[]): CampaignSummary[] {
     const impressions = rs.reduce((s, r) => s + (r.impressions ?? 0), 0);
     const clicks = rs.reduce((s, r) => s + (r.clicks ?? 0), 0);
     const results = rs.reduce((s, r) => s + (r.results ?? 0), 0);
+    const messages = rs.reduce((s, r) => s + (r.messages ?? 0), 0);
     out.push({
       campaignId,
       name: rs[0].campaignName,
@@ -67,6 +70,7 @@ export function campaignSummaries(rows: AdInsightRow[]): CampaignSummary[] {
       impressions,
       clicks,
       results,
+      messages,
       ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
       cpc: clicks > 0 ? spend / clicks : null,
       cpm: impressions > 0 ? (spend / impressions) * 1000 : null,
@@ -93,6 +97,7 @@ export type AdCreativeRow = {
   linkClicks: number | null;
   frequency: number | null; // frecuencia DEL DÍA, no del período — ver adSummaries
   results: number | null;
+  messages: number | null;
 };
 
 export type AdSummary = {
@@ -106,6 +111,7 @@ export type AdSummary = {
   impressions: number;
   clicks: number;
   results: number;
+  messages: number;
   ctr: number | null;
   cpc: number | null;
   cpm: number | null;
@@ -125,6 +131,7 @@ export function adSummaries(rows: AdCreativeRow[]): AdSummary[] {
     const impressions = rs.reduce((s, r) => s + (r.impressions ?? 0), 0);
     const clicks = rs.reduce((s, r) => s + (r.clicks ?? 0), 0);
     const results = rs.reduce((s, r) => s + (r.results ?? 0), 0);
+    const messages = rs.reduce((s, r) => s + (r.messages ?? 0), 0);
     // El alcance no se puede sumar entre días (la misma persona puede repetirse) —
     // se usa el máximo diario como piso conservador para una frecuencia aproximada.
     const maxDailyReach = Math.max(0, ...rs.map((r) => r.reach ?? 0));
@@ -139,6 +146,7 @@ export function adSummaries(rows: AdCreativeRow[]): AdSummary[] {
       impressions,
       clicks,
       results,
+      messages,
       ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
       cpc: clicks > 0 ? spend / clicks : null,
       cpm: impressions > 0 ? (spend / impressions) * 1000 : null,
@@ -148,6 +156,50 @@ export function adSummaries(rows: AdCreativeRow[]): AdSummary[] {
   }
 
   return out.sort((a, b) => b.spend - a.spend);
+}
+
+// ── Tendencia mensual por anuncio ──────────────────────────────────────────────
+// Para responder "¿algún mes empeoró?" — agrupa los daily rows de UN anuncio
+// por mes calendario. Necesita rows de un rango largo (ver daysBack en sync.ts).
+export type MonthPoint = {
+  month: string; // YYYY-MM
+  spend: number;
+  impressions: number;
+  clicks: number;
+  results: number;
+  messages: number;
+  ctr: number | null;
+  costPerResult: number | null;
+};
+
+export function adMonthlyTrend(rows: AdCreativeRow[], adId: number): MonthPoint[] {
+  const byMonth = new Map<string, AdCreativeRow[]>();
+  for (const r of rows) {
+    if (r.adId !== adId) continue;
+    const key = r.date.slice(0, 7); // YYYY-MM
+    (byMonth.get(key) ?? byMonth.set(key, []).get(key)!).push(r);
+  }
+
+  const out: MonthPoint[] = [];
+  for (const [month, rs] of byMonth) {
+    const spend = rs.reduce((s, r) => s + (r.spend ?? 0), 0);
+    const impressions = rs.reduce((s, r) => s + (r.impressions ?? 0), 0);
+    const clicks = rs.reduce((s, r) => s + (r.clicks ?? 0), 0);
+    const results = rs.reduce((s, r) => s + (r.results ?? 0), 0);
+    const messages = rs.reduce((s, r) => s + (r.messages ?? 0), 0);
+    out.push({
+      month,
+      spend,
+      impressions,
+      clicks,
+      results,
+      messages,
+      ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
+      costPerResult: results > 0 ? spend / results : null,
+    });
+  }
+
+  return out.sort((a, b) => a.month.localeCompare(b.month));
 }
 
 // Benchmark de terciles entre los anuncios del propio período (mín. 3) — para

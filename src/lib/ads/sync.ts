@@ -9,11 +9,11 @@ type AdAccount = { id: number; adAccountId: string; accessToken: string };
 const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
 
 // Trae campañas + desglose diario de los últimos `daysBack` días y los
-// upsertea. daysBack por default cubre de sobra el intervalo entre corridas
-// del cron (1x/día) incluso si alguna corrida falla.
+// upsertea. 90 días por default: alcanza para ver tendencias mes a mes desde
+// el primer sync, no solo para cubrir el intervalo entre corridas del cron.
 export async function syncAdData(
   account: AdAccount,
-  daysBack = 14
+  daysBack = 90
 ): Promise<{ campaigns: number; insightRows: number; ads: number; adInsightRows: number }> {
   // Autocorrige la moneda guardada — cubre cuentas conectadas antes de que
   // este campo existiera, sin tener que pedir que reconecten.
@@ -72,6 +72,8 @@ export async function syncAdData(
       cpm: row.cpm,
       ctr: row.ctr,
       results: row.results,
+      messages: row.messages,
+      actions: row.actions,
       capturedAt: new Date(),
     };
 
@@ -136,6 +138,8 @@ export async function syncAdData(
         ctr: row.ctr,
         frequency: row.frequency,
         results: row.results,
+        messages: row.messages,
+        actions: row.actions,
         capturedAt: new Date(),
       };
 

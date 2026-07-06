@@ -4,22 +4,11 @@ import { adInsights, adCreativeInsights } from "@/db/schema";
 import { getConnectedAdAccount } from "@/lib/ads/account-store";
 import { dailySpend, campaignSummaries, adSummaries, adBenchmark, type AdInsightRow, type AdCreativeRow } from "@/lib/ads-insights";
 import { getUsdRate } from "@/lib/fx";
-import { AdSpendChart } from "@/components/AdsPanels";
+import { AdSpendChart, fmtMoney, fmt } from "@/components/AdsPanels";
 import { AdsView } from "@/components/AdsView";
 import { PeriodFilter } from "@/components/PeriodFilter";
 
 export const dynamic = "force-dynamic";
-
-function fmtMoney(n: number | null | undefined): string {
-  if (n == null) return "—";
-  return `$${n.toLocaleString("es-AR", { maximumFractionDigits: n >= 1000 ? 0 : 2 })}`;
-}
-function fmt(n: number | null | undefined): string {
-  if (n == null) return "—";
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(Math.round(n));
-}
 
 export default async function AdsPage({
   searchParams,
@@ -81,6 +70,7 @@ export default async function AdsPage({
       clicks: i.clicks,
       linkClicks: i.linkClicks,
       results: i.results,
+      messages: i.messages,
     };
   });
 
@@ -106,6 +96,7 @@ export default async function AdsPage({
       linkClicks: i.linkClicks,
       frequency: i.frequency,
       results: i.results,
+      messages: i.messages,
     };
   });
 
@@ -116,6 +107,7 @@ export default async function AdsPage({
   const totalImpressions = rows.reduce((s, r) => s + (r.impressions ?? 0), 0);
   const totalClicks = rows.reduce((s, r) => s + (r.clicks ?? 0), 0);
   const totalResults = rows.reduce((s, r) => s + (r.results ?? 0), 0);
+  const totalMessages = rows.reduce((s, r) => s + (r.messages ?? 0), 0);
   const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : null;
   const avgCpc = totalClicks > 0 ? totalSpend / totalClicks : null;
   const costPerResult = totalResults > 0 ? totalSpend / totalResults : null;
@@ -172,6 +164,10 @@ export default async function AdsPage({
           <div className="stat-value">{totalResults || "—"}</div>
         </div>
         <div className="stat-card">
+          <div className="stat-label">Mensajes</div>
+          <div className="stat-value">{totalMessages || "—"}</div>
+        </div>
+        <div className="stat-card">
           <div className="stat-label">Costo/resultado</div>
           <div className="stat-value">{fmtMoney(costPerResult)}</div>
         </div>
@@ -185,7 +181,7 @@ export default async function AdsPage({
         <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "1.25rem", color: "var(--text-secondary)" }}>
           {campaignStats.length} campaña{campaignStats.length !== 1 ? "s" : ""} · {adStats.length} anuncio{adStats.length !== 1 ? "s" : ""} · {periodLabel}
         </h2>
-        <AdsView campaigns={campaignStats} ads={adStats} bench={bench} />
+        <AdsView campaigns={campaignStats} ads={adStats} bench={bench} adRows={adRows} />
       </div>
     </main>
   );

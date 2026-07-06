@@ -15,6 +15,33 @@ async function adsGet<T>(path: string, params: Record<string, string>, revalidat
   return body as T;
 }
 
+interface PagedResponse<TRow> {
+  data: TRow[];
+  paging?: { next?: string };
+}
+
+// Sigue paging.next hasta agotar resultados — necesario para ventanas largas
+// (ej. 90 días × varios anuncios puede superar el límite de una sola página).
+async function adsGetAllPages<TRow>(path: string, params: Record<string, string>): Promise<TRow[]> {
+  const url = new URL(`${BASE}${path}`);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+
+  const rows: TRow[] = [];
+  let nextUrl: string | undefined = url.toString();
+  while (nextUrl) {
+    const res: Response = await fetch(nextUrl);
+    const body: PagedResponse<TRow> = await res.json();
+    if (!res.ok) {
+      throw new Error(`Meta Ads API error en ${path}: ${JSON.stringify(body)}`);
+    }
+    rows.push(...(body.data ?? []));
+    nextUrl = body.paging?.next;
+  }
+  return rows;
+}
+
 export interface AdCampaign {
   id: string;
   name: string;
@@ -31,6 +58,34 @@ export async function getCampaigns(adAccountId: string, accessToken: string): Pr
   return data.data;
 }
 
+export type RawAction = { action_type: string; value: string };
+
+// "Resultados" = suma de TODAS las acciones que reporta Meta (leads, mensajes,
+// compras, etc.) — aproximación genérica. "Mensajes" filtra específicamente
+// las acciones de conversación (útil para campañas de objetivo Mensajes/WhatsApp).
+// null solo si Meta no mandó el campo actions; si lo mandó vacío, es 0 real.
+function sumActions(actions: RawAction[] | undefined, matcher?: (type: string) => boolean): number | null {
+  if (actions == null) return null;
+  const filtered = matcher ? actions.filter((a) => matcher(a.action_type)) : actions;
+  return filtered.reduce((s, a) => s + Number(a.value || 0), 0);
+}
+const isMessagingAction = (type: string) => type.includes("messaging");
+
+interface RawInsightFields {
+  spend?: string;
+  impressions?: string;
+  reach?: string;
+  clicks?: string;
+  inline_link_clicks?: string;
+  cpc?: string;
+  cpm?: string;
+  ctr?: string;
+  frequency?: string;
+  actions?: RawAction[];
+}
+
+const num = (v?: string) => (v != null && v !== "" ? Number(v) : null);
+
 export interface DailyCampaignInsight {
   campaignId: string;
   date: string; // YYYY-MM-DD
@@ -43,6 +98,8 @@ export interface DailyCampaignInsight {
   cpm: number | null;
   ctr: number | null;
   results: number | null;
+  messages: number | null;
+  actions: RawAction[] | null; // crudo, para poder sumar por tipo de acción a futuro sin re-pedir historial
 }
 
 // level=campaign + time_increment=1 trae, en una sola llamada, el desglose
@@ -54,32 +111,19 @@ export async function getDailyCampaignInsights(
   since: string,
   until: string
 ): Promise<DailyCampaignInsight[]> {
-  const num = (v?: string) => (v != null && v !== "" ? Number(v) : null);
+  const rows = await adsGetAllPages<RawInsightFields & { campaign_id: string; date_start: string }>(
+    `/${adAccountId}/insights`,
+    {
+      level: "campaign",
+      time_increment: "1",
+      time_range: JSON.stringify({ since, until }),
+      fields: "campaign_id,spend,impressions,reach,clicks,inline_link_clicks,cpc,cpm,ctr,actions",
+      limit: "500",
+      access_token: accessToken,
+    }
+  );
 
-  const data = await adsGet<{
-    data: Array<{
-      campaign_id: string;
-      date_start: string;
-      spend?: string;
-      impressions?: string;
-      reach?: string;
-      clicks?: string;
-      inline_link_clicks?: string;
-      cpc?: string;
-      cpm?: string;
-      ctr?: string;
-      actions?: Array<{ action_type: string; value: string }>;
-    }>;
-  }>(`/${adAccountId}/insights`, {
-    level: "campaign",
-    time_increment: "1",
-    time_range: JSON.stringify({ since, until }),
-    fields: "campaign_id,spend,impressions,reach,clicks,inline_link_clicks,cpc,cpm,ctr,actions",
-    limit: "500",
-    access_token: accessToken,
-  });
-
-  return data.data.map((row) => ({
+  return rows.map((row) => ({
     campaignId: row.campaign_id,
     date: row.date_start,
     spend: num(row.spend),
@@ -90,9 +134,9 @@ export async function getDailyCampaignInsights(
     cpc: num(row.cpc),
     cpm: num(row.cpm),
     ctr: num(row.ctr),
-    // "resultados" = suma de todas las acciones que reporta Meta (leads, mensajes,
-    // compras, etc.) — una aproximación genérica, no distingue por objetivo.
-    results: row.actions?.length ? row.actions.reduce((sum, a) => sum + Number(a.value || 0), 0) : null,
+    results: sumActions(row.actions),
+    messages: sumActions(row.actions, isMessagingAction),
+    actions: row.actions ?? null,
   }));
 }
 
@@ -157,6 +201,8 @@ export interface DailyAdInsight {
   ctr: number | null;
   frequency: number | null;
   results: number | null;
+  messages: number | null;
+  actions: RawAction[] | null;
 }
 
 // level=ad + time_increment=1: desglose diario de TODOS los anuncios de la
@@ -168,33 +214,19 @@ export async function getDailyAdInsights(
   since: string,
   until: string
 ): Promise<DailyAdInsight[]> {
-  const num = (v?: string) => (v != null && v !== "" ? Number(v) : null);
+  const rows = await adsGetAllPages<RawInsightFields & { ad_id: string; date_start: string }>(
+    `/${adAccountId}/insights`,
+    {
+      level: "ad",
+      time_increment: "1",
+      time_range: JSON.stringify({ since, until }),
+      fields: "ad_id,spend,impressions,reach,clicks,inline_link_clicks,cpc,cpm,ctr,frequency,actions",
+      limit: "500",
+      access_token: accessToken,
+    }
+  );
 
-  const data = await adsGet<{
-    data: Array<{
-      ad_id: string;
-      date_start: string;
-      spend?: string;
-      impressions?: string;
-      reach?: string;
-      clicks?: string;
-      inline_link_clicks?: string;
-      cpc?: string;
-      cpm?: string;
-      ctr?: string;
-      frequency?: string;
-      actions?: Array<{ action_type: string; value: string }>;
-    }>;
-  }>(`/${adAccountId}/insights`, {
-    level: "ad",
-    time_increment: "1",
-    time_range: JSON.stringify({ since, until }),
-    fields: "ad_id,spend,impressions,reach,clicks,inline_link_clicks,cpc,cpm,ctr,frequency,actions",
-    limit: "500",
-    access_token: accessToken,
-  });
-
-  return data.data.map((row) => ({
+  return rows.map((row) => ({
     adId: row.ad_id,
     date: row.date_start,
     spend: num(row.spend),
@@ -206,7 +238,9 @@ export async function getDailyAdInsights(
     cpm: num(row.cpm),
     ctr: num(row.ctr),
     frequency: num(row.frequency),
-    results: row.actions?.length ? row.actions.reduce((sum, a) => sum + Number(a.value || 0), 0) : null,
+    results: sumActions(row.actions),
+    messages: sumActions(row.actions, isMessagingAction),
+    actions: row.actions ?? null,
   }));
 }
 

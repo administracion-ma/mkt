@@ -1,13 +1,13 @@
-import type { DaySpendPoint, CampaignSummary } from "@/lib/ads-insights";
+import type { DaySpendPoint, CampaignSummary, MonthPoint } from "@/lib/ads-insights";
 
 // Mismo dorado validado que el resto de los gráficos (dataviz skill, dark mode)
 const MARK = "#CC7508";
 
-function fmtMoney(n: number | null | undefined): string {
+export function fmtMoney(n: number | null | undefined): string {
   if (n == null) return "—";
   return `$${n.toLocaleString("es-AR", { maximumFractionDigits: n >= 1000 ? 0 : 2 })}`;
 }
-function fmt(n: number | null | undefined): string {
+export function fmt(n: number | null | undefined): string {
   if (n == null) return "—";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
@@ -125,6 +125,7 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignSummary[] }) {
             <th className="num">CPC</th>
             <th className="num">CPM</th>
             <th className="num">Resultados</th>
+            <th className="num">Mensajes</th>
             <th className="num">Costo/resultado</th>
           </tr>
         </thead>
@@ -151,11 +152,57 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignSummary[] }) {
               <td className="num">{fmtMoney(c.cpc)}</td>
               <td className="num">{fmtMoney(c.cpm)}</td>
               <td className="num">{c.results || "—"}</td>
+              <td className="num">{c.messages || "—"}</td>
               <td className="num">{fmtMoney(c.costPerResult)}</td>
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ── Mini barras mensuales (para "¿algún mes empeoró?") ────────────────────────
+export function MiniMonthBars({
+  points, label, color, formatValue,
+}: {
+  points: MonthPoint[];
+  label: string;
+  color: string;
+  formatValue: (p: MonthPoint) => number;
+}) {
+  const withData = points.filter((p) => formatValue(p) > 0);
+  if (withData.length < 2) return null;
+
+  const W = 400, H = 110, PAD_B = 20, PAD_T = 16;
+  const max = Math.max(...points.map(formatValue), 1);
+  const barGap = 6;
+  const barW = Math.max(8, Math.floor(W / points.length) - barGap);
+
+  return (
+    <div style={{ marginTop: "0.75rem" }}>
+      <div style={{ fontSize: "0.68rem", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
+        {label} por mes
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: 400, display: "block" }} role="img" aria-label={`${label} por mes`}>
+        {points.map((p, i) => {
+          const val = formatValue(p);
+          const x = i * (barW + barGap);
+          const h = Math.max(2, ((H - PAD_B - PAD_T) * val) / max);
+          const y = H - PAD_B - h;
+          const monthLabel = new Date(`${p.month}-01T00:00:00`).toLocaleDateString("es-AR", { month: "short" });
+          return (
+            <g key={p.month}>
+              <rect x={x} y={y} width={barW} height={h} rx={2} fill={color}>
+                <title>{`${monthLabel}: ${val.toLocaleString("es-AR")}`}</title>
+              </rect>
+              <text x={x + barW / 2} y={H - 6} textAnchor="middle" fontSize={9} fill="var(--text-tertiary)">
+                {monthLabel}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }

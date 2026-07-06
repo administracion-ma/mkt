@@ -1,16 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import type { CampaignSummary, AdSummary, AdBenchmark } from "@/lib/ads-insights";
+import type { CampaignSummary, AdSummary, AdBenchmark, AdCreativeRow } from "@/lib/ads-insights";
 import { CampaignTable } from "./AdsPanels";
 import { AdCreativeGrid } from "./AdCreativeGrid";
 
 export function AdsView({
-  campaigns, ads, bench,
+  campaigns, ads, bench, adRows,
 }: {
   campaigns: CampaignSummary[];
   ads: AdSummary[];
   bench: AdBenchmark;
+  adRows: AdCreativeRow[];
 }) {
   const [view, setView] = useState<"ads" | "campaigns">("ads");
 
@@ -27,7 +28,7 @@ export function AdsView({
         </div>
       </div>
 
-      {view === "ads" ? <AdCreativeGrid ads={ads} bench={bench} /> : <CampaignTable campaigns={campaigns} />}
+      {view === "ads" ? <AdCreativeGrid ads={ads} bench={bench} monthlyRows={adRows} /> : <CampaignTable campaigns={campaigns} />}
     </div>
   );
 }

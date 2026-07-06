@@ -6,6 +6,7 @@ import {
   integer,
   doublePrecision,
   boolean,
+  jsonb,
   pgEnum,
 } from "drizzle-orm/pg-core";
 
@@ -167,6 +168,8 @@ export const adInsights = pgTable("ad_insights", {
   cpm: doublePrecision("cpm"),
   ctr: doublePrecision("ctr"),
   results: integer("results"), // suma de todas las "actions" que reporta Meta (leads, mensajes, compras, etc.)
+  messages: integer("messages"), // subconjunto de actions: solo conversaciones/mensajes iniciados
+  actions: jsonb("actions").$type<{ action_type: string; value: string }[]>(), // crudo, para poder sumar por tipo a futuro sin re-pedir historial
   capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -200,5 +203,7 @@ export const adCreativeInsights = pgTable("ad_creative_insights", {
   ctr: doublePrecision("ctr"),
   frequency: doublePrecision("frequency"),
   results: integer("results"),
+  messages: integer("messages"),
+  actions: jsonb("actions").$type<{ action_type: string; value: string }[]>(),
   capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
 });
