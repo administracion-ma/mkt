@@ -10,6 +10,8 @@ import type { PostCardRow } from "@/components/PostCards";
 import { PostsView } from "@/components/PostsView";
 import { SyncButton } from "@/components/SyncButton";
 import { AnalysisPanel } from "@/components/AnalysisPanel";
+import { KeyInsights } from "@/components/KeyInsights";
+import { buildKeyInsights } from "@/lib/key-insights";
 
 export const dynamic = "force-dynamic";
 
@@ -182,6 +184,15 @@ export default async function AnalyticsPage({
     .filter((a) => a.followersCount != null)
     .map((a) => ({ date: a.capturedAt.toISOString(), followers: a.followersCount! }));
 
+  const keyInsights = buildKeyInsights({
+    pillarStats,
+    hashtagStats,
+    heatmapBest: heatmap.best,
+    hookMedianSkip: hooks.medianSkip,
+    hookWorst: hooks.worst,
+    weekPoints,
+  });
+
   const periodLabel =
     from && to
       ? `${new Date(from).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })} → ${new Date(to).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}`
@@ -200,6 +211,8 @@ export default async function AnalyticsPage({
       <div style={{ marginBottom: "1.5rem" }}>
         <PeriodFilter />
       </div>
+
+      <KeyInsights insights={keyInsights} />
 
       <AnalysisPanel
         key={`${from ?? "default"}-${to ?? "default"}`}
