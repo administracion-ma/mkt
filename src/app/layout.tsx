@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import Link from "next/link";
 import { NavLinks } from "@/components/NavLinks";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
+import { logout } from "@/lib/auth/actions";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -41,6 +42,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               @{account.igUsername}
             </div>
           )}
+          <form action={logout} style={{ marginLeft: account ? "0.75rem" : "auto" }}>
+            <button type="submit" className="btn-ghost" style={{ fontSize: "0.75rem" }}>
+              Salir
+            </button>
+          </form>
         </nav>
         {children}
       </body>

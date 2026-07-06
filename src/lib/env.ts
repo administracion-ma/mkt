@@ -34,4 +34,13 @@ export const env = {
   get anthropicApiKey() {
     return required("ANTHROPIC_API_KEY");
   },
+  get appPassword() {
+    return required("APP_PASSWORD");
+  },
+  get resendApiKey() {
+    return process.env.RESEND_API_KEY || null;
+  },
+  get notifyEmailTo() {
+    return process.env.NOTIFY_EMAIL_TO || null;
+  },
 };
