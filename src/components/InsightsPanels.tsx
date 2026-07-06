@@ -99,7 +99,11 @@ export function WeeklyReachChart({ points }: { points: WeekPoint[] }) {
 }
 
 // ── Seguidores (línea) ────────────────────────────────────────────────────────
-export function FollowersChart({ points }: { points: { date: string; followers: number }[] }) {
+// periodFrom: inicio del período pedido — si es anterior al primer snapshot
+// que existe, el gráfico igual muestra "todo lo que hay" y hay que decirlo,
+// si no parece que cambiar de período no hiciera nada (el snapshot arrancó
+// hace poco, todavía no hay historia para filtrar de verdad).
+export function FollowersChart({ points, periodFrom }: { points: { date: string; followers: number }[]; periodFrom?: Date }) {
   if (points.length < 2) {
     return (
       <div className="card">
@@ -123,16 +127,25 @@ export function FollowersChart({ points }: { points: { date: string; followers: 
   const first = points[0];
   const last = points[points.length - 1];
   const delta = last.followers - first.followers;
+  // Si el período pedido empieza antes del primer snapshot real, el rango
+  // mostrado es "todo lo que hay", no lo que se pidió — avisarlo evita que
+  // parezca que cambiar de período no cambia nada.
+  const truncated = periodFrom != null && new Date(first.date).getTime() > periodFrom.getTime() + 1000 * 60 * 60 * 20;
 
   return (
     <div className="card">
       <PanelTitle hint="Snapshot diario de la cuenta, dentro del período elegido">Evolución de seguidores</PanelTitle>
-      <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", marginBottom: "0.5rem" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", marginBottom: "0.2rem", flexWrap: "wrap" }}>
         <span style={{ fontSize: "1.3rem", fontWeight: 700 }}>{last.followers.toLocaleString()}</span>
         <span style={{ fontSize: "0.78rem", fontWeight: 600, color: delta > 0 ? "#22c55e" : delta < 0 ? "var(--danger)" : "var(--text-tertiary)" }}>
-          {delta > 0 ? "+" : ""}{delta.toLocaleString()} en el período
+          {delta > 0 ? "+" : ""}{delta.toLocaleString()} {truncated ? "desde que hay datos" : "en el período"}
         </span>
       </div>
+      {truncated && (
+        <p style={{ fontSize: "0.68rem", color: "var(--text-tertiary)", margin: "0 0 0.5rem" }}>
+          Solo hay historial desde el {new Date(first.date).toLocaleDateString("es-AR", { day: "numeric", month: "short" })} — por eso el período elegido no cambia este número todavía.
+        </p>
+      )}
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: 640, display: "block" }} role="img" aria-label="Evolución de seguidores">
         <defs>
           <linearGradient id="followersFade" x1="0" y1="0" x2="0" y2="1">

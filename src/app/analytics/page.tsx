@@ -303,7 +303,7 @@ export default async function AnalyticsPage({
       {/* Insights: tendencias — necesitan más ancho para leerse bien */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(480px, 1fr))", gap: "1rem", marginTop: "1.5rem" }}>
         <WeeklyReachChart points={weekPoints} />
-        <FollowersChart points={followerPoints} />
+        <FollowersChart points={followerPoints} periodFrom={resolvedFrom} />
       </div>
 
       {/* Insights: diagnóstico y rankings */}
