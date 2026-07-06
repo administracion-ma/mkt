@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import { adInsights, adCreativeInsights } from "@/db/schema";
 import { getConnectedAdAccount } from "@/lib/ads/account-store";
 import { dailySpend, campaignSummaries, adSummaries, adBenchmark, type AdInsightRow, type AdCreativeRow } from "@/lib/ads-insights";
+import { getUsdRate } from "@/lib/fx";
 import { AdSpendChart } from "@/components/AdsPanels";
 import { AdsView } from "@/components/AdsView";
 import { PeriodFilter } from "@/components/PeriodFilter";
@@ -46,7 +47,7 @@ export default async function AdsPage({
   const toDate = to ? new Date(to + "T23:59:59") : new Date();
   const fromDate = from ? new Date(from + "T00:00:00") : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const [campaigns, insightRows, adList, adInsightRows] = await Promise.all([
+  const [campaigns, insightRows, adList, adInsightRows, usdRate] = await Promise.all([
     db.query.adCampaigns.findMany(),
     db.query.adInsights.findMany({
       where: and(gte(adInsights.date, fromDate), lte(adInsights.date, toDate)),
@@ -57,7 +58,13 @@ export default async function AdsPage({
       where: and(gte(adCreativeInsights.date, fromDate), lte(adCreativeInsights.date, toDate)),
       orderBy: (i, { asc }) => [asc(i.date)],
     }),
+    getUsdRate(account.currency),
   ]);
+
+  // Todo el gasto se convierte a USD acá, en el único punto de entrada — el
+  // resto de la app (gráficos, tablas, grilla) ya trabaja siempre en USD sin
+  // saber de conversión. CPC/CPM se recalculan solos a partir de este spend.
+  const toUsdOrRaw = (v: number | null) => (v != null && usdRate ? v / usdRate : v);
 
   const campaignById = new Map(campaigns.map((c) => [c.id, c]));
 
@@ -68,7 +75,7 @@ export default async function AdsPage({
       campaignName: c?.name ?? `Campaña #${i.campaignId}`,
       campaignStatus: c?.status ?? null,
       date: i.date.toISOString(),
-      spend: i.spend,
+      spend: toUsdOrRaw(i.spend),
       impressions: i.impressions,
       reach: i.reach,
       clicks: i.clicks,
@@ -92,7 +99,7 @@ export default async function AdsPage({
       thumbnailUrl: a?.thumbnailUrl ?? null,
       isVideo: a?.isVideo ?? false,
       date: i.date.toISOString(),
-      spend: i.spend,
+      spend: toUsdOrRaw(i.spend),
       impressions: i.impressions,
       reach: i.reach,
       clicks: i.clicks,
@@ -118,11 +125,21 @@ export default async function AdsPage({
       ? `${new Date(from).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })} → ${new Date(to).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}`
       : "Últimos 30 días";
 
+  const currencyNote =
+    account.currency !== "USD"
+      ? usdRate
+        ? `Montos convertidos de ${account.currency} a USD (tasa aprox. del día)`
+        : `⚠ No se pudo convertir de ${account.currency} a USD — mostrando en ${account.currency}`
+      : null;
+
   return (
     <main className="page">
       <div className="page-header">
         <h1 className="page-title">Meta Ads</h1>
         <p className="page-subtitle">{periodLabel} · {account.label ?? account.adAccountId}</p>
+        {currencyNote && (
+          <p style={{ fontSize: "0.72rem", color: "var(--text-tertiary)", marginTop: "0.2rem" }}>{currencyNote}</p>
+        )}
       </div>
 
       <div style={{ marginBottom: "1.5rem" }}>

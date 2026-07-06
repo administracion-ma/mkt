@@ -7,6 +7,7 @@ interface SaveAdAccountInput {
   adAccountId: string;
   accessToken: string;
   label?: string;
+  currency?: string;
 }
 
 function normalizeAccountId(id: string): string {
@@ -21,6 +22,7 @@ export async function saveAdAccount(input: SaveAdAccountInput) {
   const values = {
     adAccountId,
     label: input.label ?? null,
+    currency: input.currency ?? "USD",
     accessTokenEnc: encryptSecret(input.accessToken),
     updatedAt: new Date(),
   };
@@ -32,6 +34,12 @@ export async function saveAdAccount(input: SaveAdAccountInput) {
 
   const [created] = await db.insert(adAccounts).values(values).returning({ id: adAccounts.id });
   return created.id;
+}
+
+// Actualiza solo la moneda — usado por el sync para autocorregirla en cuentas
+// que se conectaron antes de que este campo existiera, sin pedir reconectar.
+export async function updateAdAccountCurrency(id: number, currency: string) {
+  await db.update(adAccounts).set({ currency, updatedAt: new Date() }).where(eq(adAccounts.id, id));
 }
 
 export async function getConnectedAdAccount() {

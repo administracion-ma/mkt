@@ -1,9 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { adCampaigns, adInsights, ads, adCreativeInsights } from "@/db/schema";
-import { getCampaigns, getDailyCampaignInsights, getAds, getDailyAdInsights } from "@/lib/ads/graph-api";
+import { getCampaigns, getDailyCampaignInsights, getAds, getDailyAdInsights, verifyAdAccount } from "@/lib/ads/graph-api";
+import { updateAdAccountCurrency } from "@/lib/ads/account-store";
 
-type AdAccount = { adAccountId: string; accessToken: string };
+type AdAccount = { id: number; adAccountId: string; accessToken: string };
 
 const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -14,6 +15,12 @@ export async function syncAdData(
   account: AdAccount,
   daysBack = 14
 ): Promise<{ campaigns: number; insightRows: number; ads: number; adInsightRows: number }> {
+  // Autocorrige la moneda guardada — cubre cuentas conectadas antes de que
+  // este campo existiera, sin tener que pedir que reconecten.
+  await verifyAdAccount(account.adAccountId, account.accessToken)
+    .then((info) => updateAdAccountCurrency(account.id, info.currency))
+    .catch(() => {});
+
   const campaigns = await getCampaigns(account.adAccountId, account.accessToken);
 
   const campaignIdMap = new Map<string, number>();

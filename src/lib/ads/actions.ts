@@ -16,7 +16,7 @@ export async function connectAdAccount(formData: FormData): Promise<{ ok: boolea
 
   try {
     const info = await verifyAdAccount(normalizedId, accessToken);
-    await saveAdAccount({ adAccountId: normalizedId, accessToken, label: info.name });
+    await saveAdAccount({ adAccountId: normalizedId, accessToken, label: info.name, currency: info.currency });
     return { ok: true, message: `Conectado a "${info.name}" (${info.currency}). Ahora podés sincronizar la pauta.` };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "No se pudo verificar la cuenta. Revisá el ID y el token." };

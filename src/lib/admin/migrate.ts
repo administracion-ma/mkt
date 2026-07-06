@@ -105,6 +105,10 @@ export async function applyMigration(): Promise<void> {
   `);
 
   await db.execute(sql`
+    ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'USD';
+  `);
+
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS ad_campaigns (
       id serial PRIMARY KEY,
       campaign_id text NOT NULL UNIQUE,

@@ -137,6 +137,7 @@ export const adAccounts = pgTable("ad_accounts", {
   id: serial("id").primaryKey(),
   adAccountId: text("ad_account_id").notNull(), // "act_123456789"
   label: text("label"),
+  currency: text("currency").notNull().default("USD"), // moneda de la cuenta (ISO 4217), ej. "PYG"
   accessTokenEnc: text("access_token_enc").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
