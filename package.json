@@ -12,6 +12,7 @@
     "db:studio": "drizzle-kit studio",
     "publish:scheduled": "tsx scripts/publish-scheduled-posts.ts",
     "sync:metrics": "tsx scripts/sync-post-metrics.ts",
+    "sync:ads": "tsx scripts/sync-ads.ts",
     "import:history": "tsx scripts/import-instagram-history.ts",
     "refresh:token": "tsx scripts/refresh-token.ts",
     "classify:pillars": "tsx scripts/classify-pillars.ts"

@@ -1,0 +1,25 @@
+name: Sincronizar Meta Ads
+
+on:
+  schedule:
+    # 1 vez por día a las 06:00 hora Argentina (UTC-3) — la pauta no cambia
+    # tan rápido como el contenido orgánico, no hace falta más frecuencia.
+    - cron: "0 9 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - run: npm run sync:ads
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}

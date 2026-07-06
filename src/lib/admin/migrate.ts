@@ -92,4 +92,46 @@ export async function applyMigration(): Promise<void> {
     SELECT ${BRAND_PROFILE_DRAFT}
     WHERE NOT EXISTS (SELECT 1 FROM brand_profile);
   `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS ad_accounts (
+      id serial PRIMARY KEY,
+      ad_account_id text NOT NULL,
+      label text,
+      access_token_enc text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS ad_campaigns (
+      id serial PRIMARY KEY,
+      campaign_id text NOT NULL UNIQUE,
+      name text NOT NULL,
+      objective text,
+      status text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS ad_insights (
+      id serial PRIMARY KEY,
+      campaign_id integer NOT NULL REFERENCES ad_campaigns(id),
+      date timestamptz NOT NULL,
+      spend double precision,
+      impressions integer,
+      reach integer,
+      clicks integer,
+      link_clicks integer,
+      cpc double precision,
+      cpm double precision,
+      ctr double precision,
+      results integer,
+      captured_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE(campaign_id, date)
+    );
+  `);
 }

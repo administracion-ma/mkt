@@ -129,3 +129,41 @@ export const analysisReports = pgTable("analysis_reports", {
   modelUsed: text("model_used").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Meta Ads (Marketing API) — solo lectura de métricas, nunca se crean/pausan
+// campañas desde acá. Se conecta con un System User Token (ads_read), no OAuth.
+export const adAccounts = pgTable("ad_accounts", {
+  id: serial("id").primaryKey(),
+  adAccountId: text("ad_account_id").notNull(), // "act_123456789"
+  label: text("label"),
+  accessTokenEnc: text("access_token_enc").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const adCampaigns = pgTable("ad_campaigns", {
+  id: serial("id").primaryKey(),
+  campaignId: text("campaign_id").notNull().unique(), // ID de Meta
+  name: text("name").notNull(),
+  objective: text("objective"),
+  status: text("status"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Un snapshot por campaña por día (desglose diario de la Marketing API)
+export const adInsights = pgTable("ad_insights", {
+  id: serial("id").primaryKey(),
+  campaignId: integer("campaign_id").notNull().references(() => adCampaigns.id),
+  date: timestamp("date", { withTimezone: true }).notNull(),
+  spend: doublePrecision("spend"),
+  impressions: integer("impressions"),
+  reach: integer("reach"),
+  clicks: integer("clicks"),
+  linkClicks: integer("link_clicks"),
+  cpc: doublePrecision("cpc"),
+  cpm: doublePrecision("cpm"),
+  ctr: doublePrecision("ctr"),
+  results: integer("results"), // suma de todas las "actions" que reporta Meta (leads, mensajes, compras, etc.)
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+});

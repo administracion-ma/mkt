@@ -1,55 +1,14 @@
-"use client";
-
-import { useState, useTransition } from "react";
 import { runMigration, runClassification, runFixGraphics } from "@/lib/admin/actions";
+import { runAdsSync } from "@/lib/ads/actions";
+import { getConnectedAdAccount } from "@/lib/ads/account-store";
+import { ActionCard } from "@/components/admin/ActionCard";
+import { ConnectAdAccountForm } from "@/components/ConnectAdAccountForm";
 
-function ActionCard({
-  title, description, buttonLabel, action,
-}: {
-  title: string;
-  description: string;
-  buttonLabel: string;
-  action: () => Promise<{ ok: boolean; message: string }>;
-}) {
-  const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+export const dynamic = "force-dynamic";
 
-  function handleClick() {
-    setResult(null);
-    startTransition(async () => {
-      const r = await action();
-      setResult(r);
-    });
-  }
+export default async function AdminPage() {
+  const adAccount = await getConnectedAdAccount().catch(() => null);
 
-  return (
-    <div className="card" style={{ marginBottom: "1.25rem" }}>
-      <h3 style={{ fontSize: "0.95rem", fontWeight: 600, margin: "0 0 0.3rem" }}>{title}</h3>
-      <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 1rem" }}>{description}</p>
-      <button onClick={handleClick} disabled={pending} className="btn btn-primary">
-        {pending ? "Ejecutando…" : buttonLabel}
-      </button>
-      {result && (
-        <div
-          style={{
-            marginTop: "1rem",
-            padding: "0.75rem",
-            borderRadius: 8,
-            background: result.ok ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
-            border: `1px solid ${result.ok ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
-            fontSize: "0.78rem",
-            color: result.ok ? "#22c55e" : "var(--danger)",
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {result.ok ? "✓ " : "✕ "}{result.message}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function AdminPage() {
   return (
     <main className="page">
       <div className="page-header">
@@ -59,7 +18,7 @@ export default function AdminPage() {
 
       <ActionCard
         title="Aplicar migración de base de datos"
-        description="Crea tablas y columnas nuevas cuando se agrega una funcionalidad (ej: campos de producción, informes de IA). Es seguro tocarlo varias veces — no rompe nada si ya estaba aplicado."
+        description="Crea tablas y columnas nuevas cuando se agrega una funcionalidad (ej: campos de producción, informes de IA, Meta Ads). Es seguro tocarlo varias veces — no rompe nada si ya estaba aplicado."
         buttonLabel="Aplicar migración"
         action={runMigration}
       />
@@ -77,6 +36,17 @@ export default function AdminPage() {
         buttonLabel="Corregir"
         action={runFixGraphics}
       />
+
+      <ConnectAdAccountForm connectedLabel={adAccount?.label ?? null} />
+
+      {adAccount && (
+        <ActionCard
+          title="Sincronizar Meta Ads ahora"
+          description="Trae campañas y métricas de los últimos 14 días. Corre automáticamente 1 vez por día, usá este botón si necesitás datos más frescos ya mismo."
+          buttonLabel="Sincronizar pauta"
+          action={runAdsSync}
+        />
+      )}
     </main>
   );
 }
