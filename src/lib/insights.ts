@@ -196,7 +196,7 @@ export type HashtagStat = {
 
 const MIN_POSTS_FOR_HASHTAG = 2;
 
-function extractHashtags(caption: string | null): string[] {
+export function extractHashtags(caption: string | null): string[] {
   if (!caption) return [];
   const matches = caption.match(/#[\p{L}0-9_]+/gu) ?? [];
   return Array.from(new Set(matches.map((h) => h.toLowerCase())));
@@ -223,4 +223,19 @@ export function hashtagPerformance(rows: InsightRow[]): HashtagStat[] {
   }
 
   return stats.sort((a, b) => (b.alcanceMediano ?? 0) - (a.alcanceMediano ?? 0)).slice(0, 15);
+}
+
+// Para distinguir, cuando no hay ranking, entre "no usaron hashtags en este
+// período" (dato de siempre) y "usaron pero ninguno se repite" — y para decir
+// desde cuándo no se usan, hace falta mirar más allá del período: allRows.
+export function hashtagUsageSummary(
+  periodRows: InsightRow[],
+  allCaptions: { caption: string | null; publishedAt: string | null }[]
+): { stats: HashtagStat[]; anyInPeriod: boolean; lastUsedAt: string | null } {
+  const stats = hashtagPerformance(periodRows);
+  const anyInPeriod = periodRows.some((r) => extractHashtags(r.caption).length > 0);
+  const withTag = allCaptions
+    .filter((r) => r.publishedAt != null && extractHashtags(r.caption).length > 0)
+    .sort((a, b) => (b.publishedAt! > a.publishedAt! ? 1 : -1));
+  return { stats, anyInPeriod, lastUsedAt: withTag[0]?.publishedAt ?? null };
 }

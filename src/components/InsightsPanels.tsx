@@ -368,17 +368,38 @@ export function PillarLeaderboard({ stats }: { stats: PillarStat[] }) {
   );
 }
 
+// "hace 3 meses", "hace 12 días", etc. — para decir desde cuándo no se usan hashtags.
+function elapsedLabel(fromISO: string, to: Date): string {
+  const days = Math.max(0, Math.round((to.getTime() - new Date(fromISO).getTime()) / 86_400_000));
+  if (days < 1) return "hoy";
+  if (days < 14) return `${days} día${days !== 1 ? "s" : ""}`;
+  if (days < 60) return `${Math.round(days / 7)} semanas`;
+  if (days < 365) return `${Math.round(days / 30)} meses`;
+  return `${(days / 365).toFixed(1)} años`;
+}
+
 // ── Rendimiento de hashtags ───────────────────────────────────────────────────
-export function HashtagPerformance({ stats }: { stats: HashtagStat[] }) {
+export function HashtagPerformance({
+  stats, anyInPeriod, lastUsedAt, periodTo,
+}: {
+  stats: HashtagStat[];
+  anyInPeriod?: boolean;
+  lastUsedAt?: string | null;
+  periodTo?: Date;
+}) {
   if (stats.length === 0) {
+    const to = periodTo ?? new Date();
+    const message = anyInPeriod
+      ? "Usaste hashtags en este período, pero ninguno se repite en 2+ posts todavía — repetí el mismo para poder comparar su rendimiento."
+      : lastUsedAt
+        ? `No se usan hashtags hace ${elapsedLabel(lastUsedAt, to)} (último uso: ${new Date(lastUsedAt).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}).`
+        : "Nunca se usaron hashtags en los captions de los posts registrados.";
     return (
       <div className="card">
         <PanelTitle hint="Necesita el mismo hashtag repetido en 2+ posts para comparar">
           Rendimiento de hashtags
         </PanelTitle>
-        <p style={{ fontSize: "0.75rem", color: "var(--text-tertiary)" }}>
-          No se encontraron hashtags repetidos en los captions de este período.
-        </p>
+        <p style={{ fontSize: "0.75rem", color: "var(--text-tertiary)" }}>{message}</p>
       </div>
     );
   }

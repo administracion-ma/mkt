@@ -1,7 +1,7 @@
 import { and, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
 import { posts, accountMetrics } from "@/db/schema";
-import { weeklyReach, bestTimeHeatmap, hookRanking, pillarPerformance, hashtagPerformance } from "@/lib/insights";
+import { weeklyReach, bestTimeHeatmap, hookRanking, pillarPerformance, hashtagUsageSummary } from "@/lib/insights";
 import { WeeklyReachChart, FollowersChart, BestTimeHeatmap, HookDiagnosis, PillarLeaderboard, HashtagPerformance } from "@/components/InsightsPanels";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
 import { getAccountSummary } from "@/lib/instagram/graph-api";
@@ -57,7 +57,7 @@ export default async function AnalyticsPage({
 
   const summary = await getAccountSummary(account.igUserId, account.accessToken).catch(() => null);
 
-  const [publishedPosts, allMetrics, accountHistory, allPillars] = await Promise.all([
+  const [publishedPosts, allMetrics, accountHistory, allPillars, allCaptions] = await Promise.all([
     db.query.posts.findMany({
       where: and(
         eq(posts.status, "PUBLISHED"),
@@ -80,6 +80,13 @@ export default async function AnalyticsPage({
       })
       .catch(() => []),
     db.query.pillars.findMany(),
+    // Todo el historial (sin filtro de período) — para saber desde cuándo no se usan
+    // hashtags, aunque el período elegido no alcance a mostrar el último uso real.
+    db.query.posts.findMany({
+      where: eq(posts.status, "PUBLISHED"),
+      columns: { caption: true, publishedAt: true },
+      orderBy: (p, { desc }) => [desc(p.publishedAt)],
+    }),
   ]);
 
   // Resolvemos el mismo período default que usa /api/analyze (últimos 30 días si no hay filtro)
@@ -179,14 +186,17 @@ export default async function AnalyticsPage({
   const heatmap = bestTimeHeatmap(rows);
   const hooks = hookRanking(rows);
   const pillarStats = pillarPerformance(rows, allPillars);
-  const hashtagStats = hashtagPerformance(rows);
+  const hashtagUsage = hashtagUsageSummary(
+    rows,
+    allCaptions.map((p) => ({ caption: p.caption ?? null, publishedAt: p.publishedAt ? p.publishedAt.toISOString() : null }))
+  );
   const followerPoints = accountHistory
     .filter((a) => a.followersCount != null)
     .map((a) => ({ date: a.capturedAt.toISOString(), followers: a.followersCount! }));
 
   const keyInsights = buildKeyInsights({
     pillarStats,
-    hashtagStats,
+    hashtagStats: hashtagUsage.stats,
     heatmapBest: heatmap.best,
     hookMedianSkip: hooks.medianSkip,
     hookWorst: hooks.worst,
@@ -311,7 +321,7 @@ export default async function AnalyticsPage({
         <BestTimeHeatmap cells={heatmap.cells} best={heatmap.best} />
         <HookDiagnosis best={hooks.best} worst={hooks.worst} medianSkip={hooks.medianSkip} />
         <PillarLeaderboard stats={pillarStats} />
-        <HashtagPerformance stats={hashtagStats} />
+        <HashtagPerformance stats={hashtagUsage.stats} anyInPeriod={hashtagUsage.anyInPeriod} lastUsedAt={hashtagUsage.lastUsedAt} periodTo={resolvedTo} />
       </div>
 
       {/* Posts cards */}
