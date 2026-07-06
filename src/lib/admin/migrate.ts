@@ -193,4 +193,15 @@ export async function applyMigration(): Promise<void> {
       ADD COLUMN IF NOT EXISTS messages integer,
       ADD COLUMN IF NOT EXISTS actions jsonb;
   `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS sales (
+      id serial PRIMARY KEY,
+      amount_usd double precision NOT NULL,
+      occurred_at timestamptz NOT NULL,
+      note text,
+      campaign_id integer REFERENCES ad_campaigns(id),
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
 }

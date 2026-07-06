@@ -1,6 +1,6 @@
 import { and, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
-import { adInsights, adCreativeInsights } from "@/db/schema";
+import { adInsights, adCreativeInsights, sales } from "@/db/schema";
 import { getConnectedAdAccount } from "@/lib/ads/account-store";
 import {
   dailySpend, campaignSummaries, adSummaries, adBenchmark, unifiedPillarPerformance,
@@ -11,6 +11,7 @@ import { getAnalyticsRows } from "@/lib/analytics-data";
 import { pillarPerformance } from "@/lib/insights";
 import { AdSpendChart, fmtMoney, fmt, UnifiedPillarTable } from "@/components/AdsPanels";
 import { AdsView } from "@/components/AdsView";
+import { LogSaleForm } from "@/components/LogSaleForm";
 import { PeriodFilter } from "@/components/PeriodFilter";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +47,7 @@ export default async function AdsPage({
   // el filtro default de 30 días nunca se ven más de 1-2 meses para comparar.
   const monthlyWindowStart = new Date(toDate.getTime() - 400 * 24 * 60 * 60 * 1000);
 
-  const [campaigns, insightRows, adList, adInsightRows, allAdInsightRows, usdRate, allPillars, organicRows] = await Promise.all([
+  const [campaigns, insightRows, adList, adInsightRows, allAdInsightRows, usdRate, allPillars, organicRows, periodSales] = await Promise.all([
     db.query.adCampaigns.findMany(),
     db.query.adInsights.findMany({
       where: and(gte(adInsights.date, fromDate), lte(adInsights.date, toDate)),
@@ -64,6 +65,9 @@ export default async function AdsPage({
     getUsdRate(account.currency),
     db.query.pillars.findMany(),
     getAnalyticsRows(fromDate, toDate),
+    db.query.sales.findMany({
+      where: and(gte(sales.occurredAt, fromDate), lte(sales.occurredAt, toDate)),
+    }).catch(() => []),
   ]);
 
   // Todo el gasto se convierte a USD acá, en el único punto de entrada — el
@@ -138,6 +142,9 @@ export default async function AdsPage({
   const avgCpc = totalClicks > 0 ? totalSpend / totalClicks : null;
   const costPerResult = totalResults > 0 ? totalSpend / totalResults : null;
 
+  const totalRevenue = periodSales.reduce((s, r) => s + r.amountUsd, 0);
+  const roas = totalSpend > 0 && periodSales.length > 0 ? totalRevenue / totalSpend : null;
+
   const periodLabel =
     from && to
       ? `${new Date(from).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })} → ${new Date(to).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}`
@@ -197,10 +204,26 @@ export default async function AdsPage({
           <div className="stat-label">Costo/resultado</div>
           <div className="stat-value">{fmtMoney(costPerResult)}</div>
         </div>
+        <div className="stat-card">
+          <div className="stat-label">Ingresos cargados</div>
+          <div className="stat-value">{periodSales.length > 0 ? fmtMoney(totalRevenue) : "—"}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">ROAS</div>
+          <div className="stat-value accent">{roas != null ? `${roas.toFixed(1)}x` : "—"}</div>
+        </div>
       </div>
 
       <div style={{ margin: "1.5rem 0" }}>
         <AdSpendChart points={spendPoints} />
+      </div>
+
+      <div className="card" style={{ marginBottom: "1.5rem" }}>
+        <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.3rem" }}>Registrar venta</h2>
+        <p style={{ fontSize: "0.72rem", color: "var(--text-tertiary)", marginBottom: "1rem" }}>
+          No hay checkout ni pixel que lo detecte solo — cargalo a mano para que el ROAS de arriba sea real, no solo costo por mensaje.
+        </p>
+        <LogSaleForm campaigns={campaigns.map((c) => ({ campaignId: c.id, name: c.name }))} />
       </div>
 
       <div className="card" style={{ marginBottom: "1.5rem" }}>

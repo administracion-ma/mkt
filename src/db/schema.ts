@@ -213,3 +213,17 @@ export const adCreativeInsights = pgTable("ad_creative_insights", {
   actions: jsonb("actions").$type<{ action_type: string; value: string }[]>(),
   capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Carga manual de ventas — no hay forma de saberlo automático (Coinbox vende
+// hardware de minería, no hay checkout/pixel acá), así que sin esto el gasto
+// de pauta nunca conecta con la plata real que entró (ROAS de verdad, no solo
+// costo por mensaje/lead). Mismo espíritu que las otras cargas manuales de la
+// app (pilares, editores): liviano, vía web, no requiere integrar nada nuevo.
+export const sales = pgTable("sales", {
+  id: serial("id").primaryKey(),
+  amountUsd: doublePrecision("amount_usd").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  note: text("note"),
+  campaignId: integer("campaign_id").references(() => adCampaigns.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
