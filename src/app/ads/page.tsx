@@ -12,6 +12,7 @@ import { pillarPerformance } from "@/lib/insights";
 import { AdSpendChart, fmtMoney, fmt, UnifiedPillarTable } from "@/components/AdsPanels";
 import { AdsView } from "@/components/AdsView";
 import { LogSaleForm } from "@/components/LogSaleForm";
+import { AdsAnalysisPanel } from "@/components/AdsAnalysisPanel";
 import { PeriodFilter } from "@/components/PeriodFilter";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,15 @@ export default async function AdsPage({
   // mucho más atrás que el período elegido arriba de la página — si no, con
   // el filtro default de 30 días nunca se ven más de 1-2 meses para comparar.
   const monthlyWindowStart = new Date(toDate.getTime() - 400 * 24 * 60 * 60 * 1000);
+
+  const sameDay = (a: Date, b: Date) => a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
+  const lastAdsReportAny = await db.query.adAnalysisReports
+    .findFirst({ orderBy: (r, { desc }) => [desc(r.createdAt)] })
+    .catch(() => null);
+  const lastAdsReport =
+    lastAdsReportAny && sameDay(lastAdsReportAny.periodFrom, fromDate) && sameDay(lastAdsReportAny.periodTo, toDate)
+      ? lastAdsReportAny
+      : null;
 
   const [campaigns, insightRows, adList, adInsightRows, allAdInsightRows, usdRate, allPillars, organicRows, periodSales] = await Promise.all([
     db.query.adCampaigns.findMany(),
@@ -170,6 +180,14 @@ export default async function AdsPage({
       <div style={{ marginBottom: "1.5rem" }}>
         <PeriodFilter />
       </div>
+
+      <AdsAnalysisPanel
+        key={`${from ?? "default"}-${to ?? "default"}`}
+        initialSummary={lastAdsReport?.summary ?? null}
+        initialCreatedAt={lastAdsReport?.createdAt ? lastAdsReport.createdAt.toISOString() : null}
+        from={from}
+        to={to}
+      />
 
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
         <div className="stat-card">

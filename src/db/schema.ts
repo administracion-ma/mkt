@@ -227,3 +227,15 @@ export const sales = pgTable("sales", {
   campaignId: integer("campaign_id").references(() => adCampaigns.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Informe de IA para pauta — mismo mecanismo de memoria que analysis_reports
+// (Instagram orgánico): compara contra el informe anterior para hacer
+// seguimiento explícito de si una recomendación se reflejó en los datos.
+export const adAnalysisReports = pgTable("ad_analysis_reports", {
+  id: serial("id").primaryKey(),
+  periodFrom: timestamp("period_from", { withTimezone: true }).notNull(),
+  periodTo: timestamp("period_to", { withTimezone: true }).notNull(),
+  summary: text("summary").notNull(),
+  modelUsed: text("model_used").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

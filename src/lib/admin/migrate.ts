@@ -204,4 +204,15 @@ export async function applyMigration(): Promise<void> {
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS ad_analysis_reports (
+      id serial PRIMARY KEY,
+      period_from timestamptz NOT NULL,
+      period_to timestamptz NOT NULL,
+      summary text NOT NULL,
+      model_used text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
 }

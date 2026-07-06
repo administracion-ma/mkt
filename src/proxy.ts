@@ -8,7 +8,10 @@ const COOKIE_NAME = "mkt_auth";
 // gasto de pauta o tocar /admin — no reemplaza un sistema de usuarios real.
 const PUBLIC_PATHS = ["/login", "/privacy"];
 
-export function middleware(req: NextRequest) {
+// Next.js 16 renombró "Middleware" a "Proxy" (mismo mecanismo, solo cambia
+// el nombre de archivo/función) — este chequeo es optimista, solo lee la
+// cookie, sin tocar la base, tal como recomienda la guía de autenticación.
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const authed = req.cookies.get(COOKIE_NAME)?.value === process.env.APP_PASSWORD;
