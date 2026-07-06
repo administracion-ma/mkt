@@ -1,9 +1,10 @@
 import { and, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
-import { adInsights } from "@/db/schema";
+import { adInsights, adCreativeInsights } from "@/db/schema";
 import { getConnectedAdAccount } from "@/lib/ads/account-store";
-import { dailySpend, campaignSummaries, type AdInsightRow } from "@/lib/ads-insights";
-import { AdSpendChart, CampaignTable } from "@/components/AdsPanels";
+import { dailySpend, campaignSummaries, adSummaries, adBenchmark, type AdInsightRow, type AdCreativeRow } from "@/lib/ads-insights";
+import { AdSpendChart } from "@/components/AdsPanels";
+import { AdsView } from "@/components/AdsView";
 import { PeriodFilter } from "@/components/PeriodFilter";
 
 export const dynamic = "force-dynamic";
@@ -45,10 +46,15 @@ export default async function AdsPage({
   const toDate = to ? new Date(to + "T23:59:59") : new Date();
   const fromDate = from ? new Date(from + "T00:00:00") : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const [campaigns, insightRows] = await Promise.all([
+  const [campaigns, insightRows, adList, adInsightRows] = await Promise.all([
     db.query.adCampaigns.findMany(),
     db.query.adInsights.findMany({
       where: and(gte(adInsights.date, fromDate), lte(adInsights.date, toDate)),
+      orderBy: (i, { asc }) => [asc(i.date)],
+    }),
+    db.query.ads.findMany(),
+    db.query.adCreativeInsights.findMany({
+      where: and(gte(adCreativeInsights.date, fromDate), lte(adCreativeInsights.date, toDate)),
       orderBy: (i, { asc }) => [asc(i.date)],
     }),
   ]);
@@ -73,6 +79,31 @@ export default async function AdsPage({
 
   const spendPoints = dailySpend(rows);
   const campaignStats = campaignSummaries(rows);
+
+  const adById = new Map(adList.map((a) => [a.id, a]));
+  const adRows: AdCreativeRow[] = adInsightRows.map((i) => {
+    const a = adById.get(i.adId);
+    const campaign = a ? campaignById.get(a.campaignId) : undefined;
+    return {
+      adId: i.adId,
+      adName: a?.name ?? `Anuncio #${i.adId}`,
+      adStatus: a?.status ?? null,
+      campaignName: campaign?.name ?? "—",
+      thumbnailUrl: a?.thumbnailUrl ?? null,
+      isVideo: a?.isVideo ?? false,
+      date: i.date.toISOString(),
+      spend: i.spend,
+      impressions: i.impressions,
+      reach: i.reach,
+      clicks: i.clicks,
+      linkClicks: i.linkClicks,
+      frequency: i.frequency,
+      results: i.results,
+    };
+  });
+
+  const adStats = adSummaries(adRows);
+  const bench = adBenchmark(adStats);
 
   const totalSpend = rows.reduce((s, r) => s + (r.spend ?? 0), 0);
   const totalImpressions = rows.reduce((s, r) => s + (r.impressions ?? 0), 0);
@@ -135,9 +166,9 @@ export default async function AdsPage({
 
       <div className="card">
         <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "1.25rem", color: "var(--text-secondary)" }}>
-          {campaignStats.length} campaña{campaignStats.length !== 1 ? "s" : ""} · {periodLabel}
+          {campaignStats.length} campaña{campaignStats.length !== 1 ? "s" : ""} · {adStats.length} anuncio{adStats.length !== 1 ? "s" : ""} · {periodLabel}
         </h2>
-        <CampaignTable campaigns={campaignStats} />
+        <AdsView campaigns={campaignStats} ads={adStats} bench={bench} />
       </div>
     </main>
   );

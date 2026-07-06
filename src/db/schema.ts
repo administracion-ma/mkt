@@ -5,6 +5,7 @@ import {
   timestamp,
   integer,
   doublePrecision,
+  boolean,
   pgEnum,
 } from "drizzle-orm/pg-core";
 
@@ -165,5 +166,38 @@ export const adInsights = pgTable("ad_insights", {
   cpm: doublePrecision("cpm"),
   ctr: doublePrecision("ctr"),
   results: integer("results"), // suma de todas las "actions" que reporta Meta (leads, mensajes, compras, etc.)
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Anuncio individual (creativo) — para poder ver rendimiento por pieza, no
+// solo por campaña, y mostrar la miniatura/video real de cada uno.
+export const ads = pgTable("ads", {
+  id: serial("id").primaryKey(),
+  adId: text("ad_id").notNull().unique(), // ID de Meta
+  campaignId: integer("campaign_id").notNull().references(() => adCampaigns.id),
+  name: text("name").notNull(),
+  status: text("status"),
+  creativeId: text("creative_id"),
+  thumbnailUrl: text("thumbnail_url"),
+  isVideo: boolean("is_video").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Snapshot diario por anuncio individual
+export const adCreativeInsights = pgTable("ad_creative_insights", {
+  id: serial("id").primaryKey(),
+  adId: integer("ad_id").notNull().references(() => ads.id),
+  date: timestamp("date", { withTimezone: true }).notNull(),
+  spend: doublePrecision("spend"),
+  impressions: integer("impressions"),
+  reach: integer("reach"),
+  clicks: integer("clicks"),
+  linkClicks: integer("link_clicks"),
+  cpc: doublePrecision("cpc"),
+  cpm: doublePrecision("cpm"),
+  ctr: doublePrecision("ctr"),
+  frequency: doublePrecision("frequency"),
+  results: integer("results"),
   capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
 });

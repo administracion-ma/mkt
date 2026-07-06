@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { band, bm, BM_COLOR, BM_LABEL, type MetricBand, type BmLevel } from "@/lib/benchmark";
+
+export { bm, BM_COLOR, type MetricBand, type BmLevel };
 
 export type PostCardRow = {
   id: number;
@@ -73,28 +76,10 @@ function sortValue(r: PostCardRow, key: SortKey, scoreMap?: Map<number, number>)
   }
 }
 
-// median + límites del tercio inferior/superior de la propia distribución —
-// permite clasificar "alto/medio/bajo" según cuánto varía cada métrica en la
-// práctica, en vez de un margen fijo arbitrario (±30%) que no se ajusta a la
-// dispersión real de cada señal.
-export type MetricBand = { median: number; p33: number; p67: number } | null;
 export type Benchmark = {
   reach: MetricBand; er: MetricBand; sr: MetricBand; lr: MetricBand; cr: MetricBand;
   shr: MetricBand; watch: MetricBand; play: MetricBand; skip: MetricBand; shares: MetricBand;
 };
-
-function percentile(sortedAsc: number[], p: number): number {
-  const idx = (sortedAsc.length - 1) * p;
-  const lo = Math.floor(idx), hi = Math.ceil(idx);
-  if (lo === hi) return sortedAsc[lo];
-  return sortedAsc[lo] + (sortedAsc[hi] - sortedAsc[lo]) * (idx - lo);
-}
-
-function band(values: number[]): MetricBand {
-  if (values.length < 3) return null; // muestra insuficiente para terciles confiables
-  const s = [...values].sort((a, b) => a - b);
-  return { median: median(s), p33: percentile(s, 1 / 3), p67: percentile(s, 2 / 3) };
-}
 
 export const isVideo = (r: PostCardRow) => r.mediaType === "REELS" || r.mediaType === "VIDEO";
 
@@ -178,29 +163,6 @@ function algoScore(row: PostCardRow, bd: Benchmark | null, video: boolean): numb
     sc(lkRate,  bd.lr)  * 0.15
   );
 }
-
-// ── Benchmark ────────────────────────────────────────────────────────────────
-// Terciles de la propia distribución (últimos ~10 posts del mismo tipo):
-// "alto" = tercio superior, "bajo" = tercio inferior, el resto es "típico".
-// Se ajusta solo a la dispersión real de cada métrica, en vez de asumir que
-// todas varían lo mismo con un margen fijo.
-export type BmLevel = "top" | "typical" | "low";
-
-function median(values: number[]): number {
-  if (!values.length) return 0;
-  const s = [...values].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m];
-}
-
-// invert=true: menor es mejor (ej. skip rate)
-export function bm(value: number | null, mb: MetricBand, invert = false): BmLevel | undefined {
-  if (value == null || !mb || mb.p33 === mb.p67) return undefined;
-  if (invert) return value <= mb.p33 ? "top" : value >= mb.p67 ? "low" : "typical";
-  return value >= mb.p67 ? "top" : value <= mb.p33 ? "low" : "typical";
-}
-const BM_LABEL: Record<BmLevel, string> = { top: "Valor más alto", typical: "Valor típico", low: "Valor más bajo" };
-export const BM_COLOR: Record<BmLevel, string> = { top: "#22c55e", typical: "#6b7280", low: "#ef4444" };
 
 // ── Stat chip ─────────────────────────────────────────────────────────────────
 function Stat({ label, value, accent, tooltip, benchmark }: {

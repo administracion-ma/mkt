@@ -2,12 +2,12 @@ import { env } from "@/lib/env";
 
 const BASE = `https://graph.facebook.com/${env.metaGraphApiVersion}`;
 
-async function adsGet<T>(path: string, params: Record<string, string>): Promise<T> {
+async function adsGet<T>(path: string, params: Record<string, string>, revalidateSeconds?: number): Promise<T> {
   const url = new URL(`${BASE}${path}`);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), revalidateSeconds != null ? { next: { revalidate: revalidateSeconds } } : undefined);
   const body = await res.json();
   if (!res.ok) {
     throw new Error(`Meta Ads API error en ${path}: ${JSON.stringify(body)}`);
@@ -104,4 +104,119 @@ export async function verifyAdAccount(adAccountId: string, accessToken: string):
     access_token: accessToken,
   });
   return data;
+}
+
+export interface AdMeta {
+  id: string;
+  name: string;
+  status: string;
+  campaignId: string;
+  creativeId: string | null;
+  thumbnailUrl: string | null;
+  isVideo: boolean;
+}
+
+// Metadata + creativo de cada anuncio individual — para poder mostrar la
+// miniatura/video real y no solo agregados por campaña.
+export async function getAds(adAccountId: string, accessToken: string): Promise<AdMeta[]> {
+  const data = await adsGet<{
+    data: Array<{
+      id: string;
+      name: string;
+      status: string;
+      campaign_id: string;
+      creative?: { id?: string; thumbnail_url?: string; video_id?: string };
+    }>;
+  }>(`/${adAccountId}/ads`, {
+    fields: "id,name,status,campaign_id,creative{id,thumbnail_url,video_id}",
+    limit: "300",
+    access_token: accessToken,
+  });
+
+  return data.data.map((a) => ({
+    id: a.id,
+    name: a.name,
+    status: a.status,
+    campaignId: a.campaign_id,
+    creativeId: a.creative?.id ?? null,
+    thumbnailUrl: a.creative?.thumbnail_url ?? null,
+    isVideo: !!a.creative?.video_id,
+  }));
+}
+
+export interface DailyAdInsight {
+  adId: string;
+  date: string;
+  spend: number | null;
+  impressions: number | null;
+  reach: number | null;
+  clicks: number | null;
+  linkClicks: number | null;
+  cpc: number | null;
+  cpm: number | null;
+  ctr: number | null;
+  frequency: number | null;
+  results: number | null;
+}
+
+// level=ad + time_increment=1: desglose diario de TODOS los anuncios de la
+// cuenta en una sola llamada. La frecuencia que devuelve acá es "del día", no
+// del período completo — ads-insights.ts la aproxima al agregar.
+export async function getDailyAdInsights(
+  adAccountId: string,
+  accessToken: string,
+  since: string,
+  until: string
+): Promise<DailyAdInsight[]> {
+  const num = (v?: string) => (v != null && v !== "" ? Number(v) : null);
+
+  const data = await adsGet<{
+    data: Array<{
+      ad_id: string;
+      date_start: string;
+      spend?: string;
+      impressions?: string;
+      reach?: string;
+      clicks?: string;
+      inline_link_clicks?: string;
+      cpc?: string;
+      cpm?: string;
+      ctr?: string;
+      frequency?: string;
+      actions?: Array<{ action_type: string; value: string }>;
+    }>;
+  }>(`/${adAccountId}/insights`, {
+    level: "ad",
+    time_increment: "1",
+    time_range: JSON.stringify({ since, until }),
+    fields: "ad_id,spend,impressions,reach,clicks,inline_link_clicks,cpc,cpm,ctr,frequency,actions",
+    limit: "500",
+    access_token: accessToken,
+  });
+
+  return data.data.map((row) => ({
+    adId: row.ad_id,
+    date: row.date_start,
+    spend: num(row.spend),
+    impressions: num(row.impressions),
+    reach: num(row.reach),
+    clicks: num(row.clicks),
+    linkClicks: num(row.inline_link_clicks),
+    cpc: num(row.cpc),
+    cpm: num(row.cpm),
+    ctr: num(row.ctr),
+    frequency: num(row.frequency),
+    results: row.actions?.length ? row.actions.reduce((sum, a) => sum + Number(a.value || 0), 0) : null,
+  }));
+}
+
+// El thumbnail_url del creativo es una URL firmada que expira, igual que los
+// media_url de Instagram — se pide fresco en vez de confiar en el guardado.
+export async function getFreshCreativeThumbnail(creativeId: string, accessToken: string): Promise<string | null> {
+  const data = await adsGet<{ thumbnail_url?: string }>(
+    `/${creativeId}`,
+    { fields: "thumbnail_url", access_token: accessToken },
+    1800
+  );
+  return data.thumbnail_url ?? null;
 }

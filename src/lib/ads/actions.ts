@@ -28,7 +28,10 @@ export async function runAdsSync(): Promise<{ ok: boolean; message: string }> {
     const account = await getConnectedAdAccount();
     if (!account) return { ok: false, message: "No hay ninguna cuenta de Meta Ads conectada todavía." };
     const result = await syncAdData(account);
-    return { ok: true, message: `${result.campaigns} campaña(s), ${result.insightRows} día(s)-campaña sincronizados.` };
+    return {
+      ok: true,
+      message: `${result.campaigns} campaña(s) (${result.insightRows} día-campaña), ${result.ads} anuncio(s) (${result.adInsightRows} día-anuncio) sincronizados.`,
+    };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Error desconocido" };
   }

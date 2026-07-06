@@ -134,4 +134,39 @@ export async function applyMigration(): Promise<void> {
       UNIQUE(campaign_id, date)
     );
   `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS ads (
+      id serial PRIMARY KEY,
+      ad_id text NOT NULL UNIQUE,
+      campaign_id integer NOT NULL REFERENCES ad_campaigns(id),
+      name text NOT NULL,
+      status text,
+      creative_id text,
+      thumbnail_url text,
+      is_video boolean NOT NULL DEFAULT false,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS ad_creative_insights (
+      id serial PRIMARY KEY,
+      ad_id integer NOT NULL REFERENCES ads(id),
+      date timestamptz NOT NULL,
+      spend double precision,
+      impressions integer,
+      reach integer,
+      clicks integer,
+      link_clicks integer,
+      cpc double precision,
+      cpm double precision,
+      ctr double precision,
+      frequency double precision,
+      results integer,
+      captured_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE(ad_id, date)
+    );
+  `);
 }
