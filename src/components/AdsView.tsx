@@ -6,12 +6,13 @@ import { CampaignTable } from "./AdsPanels";
 import { AdCreativeGrid } from "./AdCreativeGrid";
 
 export function AdsView({
-  campaigns, ads, bench, adRows,
+  campaigns, ads, bench, adRows, pillars,
 }: {
   campaigns: CampaignSummary[];
   ads: AdSummary[];
   bench: AdBenchmark;
   adRows: AdCreativeRow[];
+  pillars: { id: number; label: string }[];
 }) {
   const [view, setView] = useState<"ads" | "campaigns">("ads");
 
@@ -28,7 +29,7 @@ export function AdsView({
         </div>
       </div>
 
-      {view === "ads" ? <AdCreativeGrid ads={ads} bench={bench} monthlyRows={adRows} /> : <CampaignTable campaigns={campaigns} />}
+      {view === "ads" ? <AdCreativeGrid ads={ads} bench={bench} monthlyRows={adRows} /> : <CampaignTable campaigns={campaigns} pillars={pillars} />}
     </div>
   );
 }

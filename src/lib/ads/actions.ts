@@ -1,5 +1,9 @@
 "use server";
 
+import { eq } from "drizzle-orm";
+import { db } from "@/db/client";
+import { adCampaigns } from "@/db/schema";
+import { revalidatePath } from "next/cache";
 import { verifyAdAccount } from "@/lib/ads/graph-api";
 import { saveAdAccount, getConnectedAdAccount } from "@/lib/ads/account-store";
 import { syncAdData } from "@/lib/ads/sync";
@@ -21,6 +25,14 @@ export async function connectAdAccount(formData: FormData): Promise<{ ok: boolea
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "No se pudo verificar la cuenta. Revisá el ID y el token." };
   }
+}
+
+// Asignación manual de pilar a campaña — la base del cruce orgánico+pauta:
+// sin esto no hay forma de saber a qué pilar de contenido corresponde el
+// gasto de una campaña.
+export async function assignCampaignPillar(campaignId: number, pillarId: number | null): Promise<void> {
+  await db.update(adCampaigns).set({ pillarId, updatedAt: new Date() }).where(eq(adCampaigns.id, campaignId));
+  revalidatePath("/ads");
 }
 
 export async function runAdsSync(): Promise<{ ok: boolean; message: string }> {

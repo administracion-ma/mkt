@@ -121,6 +121,10 @@ export async function applyMigration(): Promise<void> {
   `);
 
   await db.execute(sql`
+    ALTER TABLE ad_campaigns ADD COLUMN IF NOT EXISTS pillar_id integer REFERENCES pillars(id);
+  `);
+
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS ad_insights (
       id serial PRIMARY KEY,
       campaign_id integer NOT NULL REFERENCES ad_campaigns(id),

@@ -9,6 +9,7 @@ export type AdInsightRow = {
   campaignId: number;
   campaignName: string;
   campaignStatus: string | null;
+  campaignPillarId: number | null;
   date: string; // ISO
   spend: number | null;
   impressions: number | null;
@@ -38,6 +39,7 @@ export type CampaignSummary = {
   campaignId: number;
   name: string;
   status: string | null;
+  pillarId: number | null;
   spend: number;
   impressions: number;
   clicks: number;
@@ -66,6 +68,7 @@ export function campaignSummaries(rows: AdInsightRow[]): CampaignSummary[] {
       campaignId,
       name: rs[0].campaignName,
       status: rs[0].campaignStatus,
+      pillarId: rs[0].campaignPillarId,
       spend,
       impressions,
       clicks,
@@ -79,6 +82,73 @@ export function campaignSummaries(rows: AdInsightRow[]): CampaignSummary[] {
   }
 
   return out.sort((a, b) => b.spend - a.spend);
+}
+
+// ── Vista unificada: orgánico + pauta por pilar de contenido ──────────────────
+// El cruce que un pro de agencia pide todo el tiempo: "¿la plata que pongo en
+// pauta empuja el contenido que ya andaba bien orgánico, o son dos cosas
+// separadas?". Se arma juntando el ranking orgánico de pilares (insights.ts)
+// con el gasto de campañas ya taggeadas a mano con un pilar.
+export type UnifiedPillarRow = {
+  pillarId: number;
+  label: string;
+  organicPosts: number;
+  organicReach: number | null;
+  organicEr: number | null;
+  paidSpend: number;
+  paidResults: number;
+  paidCostPerResult: number | null;
+};
+
+export function unifiedPillarPerformance(
+  organicStats: { pillarId: number; label: string; posts: number; alcanceMediano: number | null; erMediana: number | null }[],
+  campaigns: CampaignSummary[]
+): UnifiedPillarRow[] {
+  const byPillar = new Map<number, UnifiedPillarRow>();
+
+  for (const o of organicStats) {
+    byPillar.set(o.pillarId, {
+      pillarId: o.pillarId,
+      label: o.label,
+      organicPosts: o.posts,
+      organicReach: o.alcanceMediano,
+      organicEr: o.erMediana,
+      paidSpend: 0,
+      paidResults: 0,
+      paidCostPerResult: null,
+    });
+  }
+
+  for (const c of campaigns) {
+    if (c.pillarId == null) continue;
+    const existing = byPillar.get(c.pillarId);
+    if (existing) {
+      existing.paidSpend += c.spend;
+      existing.paidResults += c.results;
+    } else {
+      byPillar.set(c.pillarId, {
+        pillarId: c.pillarId,
+        label: `Pilar #${c.pillarId}`,
+        organicPosts: 0,
+        organicReach: null,
+        organicEr: null,
+        paidSpend: c.spend,
+        paidResults: c.results,
+        paidCostPerResult: null,
+      });
+    }
+  }
+
+  const out = Array.from(byPillar.values());
+  for (const row of out) {
+    row.paidCostPerResult = row.paidResults > 0 ? row.paidSpend / row.paidResults : null;
+  }
+
+  // Solo pilares con alguna señal (orgánica o paga) — no listar los 8 pilares
+  // vacíos si todavía no se taggeó ninguna campaña.
+  return out
+    .filter((r) => r.organicPosts > 0 || r.paidSpend > 0)
+    .sort((a, b) => b.paidSpend - a.paidSpend || (b.organicReach ?? 0) - (a.organicReach ?? 0));
 }
 
 // ── Anuncios individuales (creativo) ──────────────────────────────────────────

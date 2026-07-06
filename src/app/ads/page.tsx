@@ -2,9 +2,14 @@ import { and, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
 import { adInsights, adCreativeInsights } from "@/db/schema";
 import { getConnectedAdAccount } from "@/lib/ads/account-store";
-import { dailySpend, campaignSummaries, adSummaries, adBenchmark, type AdInsightRow, type AdCreativeRow } from "@/lib/ads-insights";
+import {
+  dailySpend, campaignSummaries, adSummaries, adBenchmark, unifiedPillarPerformance,
+  type AdInsightRow, type AdCreativeRow,
+} from "@/lib/ads-insights";
 import { getUsdRate } from "@/lib/fx";
-import { AdSpendChart, fmtMoney, fmt } from "@/components/AdsPanels";
+import { getAnalyticsRows } from "@/lib/analytics-data";
+import { pillarPerformance } from "@/lib/insights";
+import { AdSpendChart, fmtMoney, fmt, UnifiedPillarTable } from "@/components/AdsPanels";
 import { AdsView } from "@/components/AdsView";
 import { PeriodFilter } from "@/components/PeriodFilter";
 
@@ -41,7 +46,7 @@ export default async function AdsPage({
   // el filtro default de 30 días nunca se ven más de 1-2 meses para comparar.
   const monthlyWindowStart = new Date(toDate.getTime() - 400 * 24 * 60 * 60 * 1000);
 
-  const [campaigns, insightRows, adList, adInsightRows, allAdInsightRows, usdRate] = await Promise.all([
+  const [campaigns, insightRows, adList, adInsightRows, allAdInsightRows, usdRate, allPillars, organicRows] = await Promise.all([
     db.query.adCampaigns.findMany(),
     db.query.adInsights.findMany({
       where: and(gte(adInsights.date, fromDate), lte(adInsights.date, toDate)),
@@ -57,6 +62,8 @@ export default async function AdsPage({
       orderBy: (i, { asc }) => [asc(i.date)],
     }),
     getUsdRate(account.currency),
+    db.query.pillars.findMany(),
+    getAnalyticsRows(fromDate, toDate),
   ]);
 
   // Todo el gasto se convierte a USD acá, en el único punto de entrada — el
@@ -72,6 +79,7 @@ export default async function AdsPage({
       campaignId: i.campaignId,
       campaignName: c?.name ?? `Campaña #${i.campaignId}`,
       campaignStatus: c?.status ?? null,
+      campaignPillarId: c?.pillarId ?? null,
       date: i.date.toISOString(),
       spend: toUsdOrRaw(i.spend),
       impressions: i.impressions,
@@ -85,6 +93,9 @@ export default async function AdsPage({
 
   const spendPoints = dailySpend(rows);
   const campaignStats = campaignSummaries(rows);
+
+  const organicPillarStats = pillarPerformance(organicRows, allPillars);
+  const unifiedRows = unifiedPillarPerformance(organicPillarStats, campaignStats);
 
   const adById = new Map(adList.map((a) => [a.id, a]));
   const toAdCreativeRow = (i: (typeof adInsightRows)[number]): AdCreativeRow => {
@@ -192,11 +203,19 @@ export default async function AdsPage({
         <AdSpendChart points={spendPoints} />
       </div>
 
+      <div className="card" style={{ marginBottom: "1.5rem" }}>
+        <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.3rem" }}>Orgánico + pauta por pilar</h2>
+        <p style={{ fontSize: "0.72rem", color: "var(--text-tertiary)", marginBottom: "1rem" }}>
+          Asigná un pilar a cada campaña (abajo, en la tabla de campañas) para ver acá si la plata en pauta empuja el contenido que ya anda bien orgánico.
+        </p>
+        <UnifiedPillarTable rows={unifiedRows} />
+      </div>
+
       <div className="card">
         <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "1.25rem", color: "var(--text-secondary)" }}>
           {campaignStats.length} campaña{campaignStats.length !== 1 ? "s" : ""} · {adStats.length} anuncio{adStats.length !== 1 ? "s" : ""} · {periodLabel}
         </h2>
-        <AdsView campaigns={campaignStats} ads={adStats} bench={bench} adRows={allAdRows} />
+        <AdsView campaigns={campaignStats} ads={adStats} bench={bench} adRows={allAdRows} pillars={allPillars} />
       </div>
     </main>
   );

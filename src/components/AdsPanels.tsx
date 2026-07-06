@@ -1,4 +1,5 @@
-import type { DaySpendPoint, CampaignSummary, MonthPoint } from "@/lib/ads-insights";
+import type { DaySpendPoint, CampaignSummary, MonthPoint, UnifiedPillarRow } from "@/lib/ads-insights";
+import { PillarAssignSelect } from "./PillarAssignSelect";
 
 // Mismo dorado validado que el resto de los gráficos (dataviz skill, dark mode)
 const MARK = "#CC7508";
@@ -101,7 +102,7 @@ const STATUS_LABEL: Record<string, string> = {
   DELETED: "Eliminada",
 };
 
-export function CampaignTable({ campaigns }: { campaigns: CampaignSummary[] }) {
+export function CampaignTable({ campaigns, pillars }: { campaigns: CampaignSummary[]; pillars: { id: number; label: string }[] }) {
   if (campaigns.length === 0) {
     return (
       <div className="empty">
@@ -117,6 +118,7 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignSummary[] }) {
         <thead>
           <tr>
             <th>Campaña</th>
+            <th>Pilar</th>
             <th>Estado</th>
             <th className="num">Gasto</th>
             <th className="num">Impresiones</th>
@@ -134,6 +136,9 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignSummary[] }) {
             <tr key={c.campaignId}>
               <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.name}>
                 {c.name}
+              </td>
+              <td>
+                <PillarAssignSelect campaignId={c.campaignId} pillarId={c.pillarId} pillars={pillars} />
               </td>
               <td>
                 {c.status && (
@@ -154,6 +159,48 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignSummary[] }) {
               <td className="num">{c.results || "—"}</td>
               <td className="num">{c.messages || "—"}</td>
               <td className="num">{fmtMoney(c.costPerResult)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Orgánico + pauta por pilar ─────────────────────────────────────────────────
+export function UnifiedPillarTable({ rows }: { rows: UnifiedPillarRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <p style={{ fontSize: "0.75rem", color: "var(--text-tertiary)" }}>
+        Todavía no hay ninguna campaña asignada a un pilar, o no hay posts orgánicos clasificados en este período.
+      </p>
+    );
+  }
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Pilar</th>
+            <th className="num">Posts orgánicos</th>
+            <th className="num">Alcance orgánico</th>
+            <th className="num">ER orgánico</th>
+            <th className="num">Gasto pauta</th>
+            <th className="num">Resultados pauta</th>
+            <th className="num">Costo/resultado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.pillarId}>
+              <td style={{ fontWeight: 600 }}>{r.label}</td>
+              <td className="num">{r.organicPosts || "—"}</td>
+              <td className="num">{fmt(r.organicReach)}</td>
+              <td className="num">{r.organicEr != null ? `${(r.organicEr * 100).toFixed(1)}%` : "—"}</td>
+              <td className="num" style={{ color: r.paidSpend > 0 ? "var(--accent)" : undefined }}>{r.paidSpend > 0 ? fmtMoney(r.paidSpend) : "—"}</td>
+              <td className="num">{r.paidResults || "—"}</td>
+              <td className="num">{fmtMoney(r.paidCostPerResult)}</td>
             </tr>
           ))}
         </tbody>

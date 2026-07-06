@@ -150,6 +150,11 @@ export const adCampaigns = pgTable("ad_campaigns", {
   name: text("name").notNull(),
   objective: text("objective"),
   status: text("status"),
+  // Asignado a mano desde /ads — para cruzar gasto de pauta con rendimiento
+  // orgánico del mismo pilar de contenido (sin esto, orgánico y pauta viven
+  // en silos separados y no se puede responder "¿la plata en X empuja lo
+  // que ya andaba bien?").
+  pillarId: integer("pillar_id").references(() => pillars.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
