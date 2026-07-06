@@ -50,7 +50,10 @@ function mondayOf(d: Date): Date {
   return copy;
 }
 
-export function weeklyReach(rows: InsightRow[], weeks = 12): WeekPoint[] {
+// anchorDate: fin de la ventana de semanas — por defecto hoy, pero si el
+// usuario filtró a un período viejo hay que anclar ahí, si no las semanas
+// no coinciden con lo que se está mirando y el gráfico sale vacío.
+export function weeklyReach(rows: InsightRow[], weeks = 12, anchorDate = new Date()): WeekPoint[] {
   const byWeek = new Map<string, number[]>();
   for (const r of rows) {
     if (!r.publishedAt || r.reach == null) continue;
@@ -58,7 +61,7 @@ export function weeklyReach(rows: InsightRow[], weeks = 12): WeekPoint[] {
     (byWeek.get(key) ?? byWeek.set(key, []).get(key)!).push(r.reach);
   }
   const out: WeekPoint[] = [];
-  const cursor = mondayOf(new Date());
+  const cursor = mondayOf(anchorDate);
   cursor.setDate(cursor.getDate() - 7 * (weeks - 1));
   for (let i = 0; i < weeks; i++) {
     const key = cursor.toISOString().slice(0, 10);

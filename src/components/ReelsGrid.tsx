@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PostCardRow, Benchmark } from "./PostCards";
-import { fmt, fmtSec, er, rate, bm, BM_COLOR, isVideo, useAlgoScores, TYPE_COLOR, TYPE_ICON, TYPE_LABEL } from "./PostCards";
+import { fmt, fmtSec, er, rate, bm, BM_COLOR, isVideo, useAlgoScores, TYPE_COLOR, TYPE_ICON, TYPE_LABEL, Thumbnail, PostDetailBlock } from "./PostCards";
 
 // Monta el <video>/<img> recién cuando el tile entra en pantalla (+ margen) —
 // con 30-60 posts en la grilla, cargar todo de una sería un montón de pedidos
@@ -36,7 +36,7 @@ function MiniStat({ label, value, level }: { label: string; value: string; level
   );
 }
 
-function ReelTile({ row, bd, score }: { row: PostCardRow; bd: Benchmark | null; score: number | null }) {
+function ReelTile({ row, bd, score, onExpand }: { row: PostCardRow; bd: Benchmark | null; score: number | null; onExpand: () => void }) {
   const { ref, inView } = useInView<HTMLDivElement>();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -158,6 +158,24 @@ function ReelTile({ row, bd, score }: { row: PostCardRow; bd: Benchmark | null; 
             </>
           )}
         </div>
+
+        <button className="reel-tile-expand" onClick={onExpand}>
+          Ver todas las métricas ↗
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ReelDetailModal({ row, bd, score, onClose }: { row: PostCardRow; bd: Benchmark | null; score: number | null; onClose: () => void }) {
+  return (
+    <div className="reel-modal-overlay" onClick={onClose}>
+      <div className="reel-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="reel-modal-close" onClick={onClose}>✕</button>
+        <div style={{ display: "flex", gap: "1.1rem", flexWrap: "wrap" }}>
+          <Thumbnail row={row} />
+          <PostDetailBlock row={row} bd={bd} score={score} />
+        </div>
       </div>
     </div>
   );
@@ -165,17 +183,32 @@ function ReelTile({ row, bd, score }: { row: PostCardRow; bd: Benchmark | null; 
 
 export function ReelsGrid({ rows }: { rows: PostCardRow[] }) {
   const { benchmarkByType, scoreMap } = useAlgoScores(rows);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const expandedRow = expandedId != null ? rows.find((r) => r.id === expandedId) ?? null : null;
+  const bdFor = (row: PostCardRow) => (isVideo(row) ? benchmarkByType.video : benchmarkByType.image);
 
   return (
-    <div className="reels-grid">
-      {rows.map((row) => (
-        <ReelTile
-          key={row.id}
-          row={row}
-          bd={isVideo(row) ? benchmarkByType.video : benchmarkByType.image}
-          score={scoreMap.get(row.id) ?? null}
+    <>
+      <div className="reels-grid">
+        {rows.map((row) => (
+          <ReelTile
+            key={row.id}
+            row={row}
+            bd={bdFor(row)}
+            score={scoreMap.get(row.id) ?? null}
+            onExpand={() => setExpandedId(row.id)}
+          />
+        ))}
+      </div>
+
+      {expandedRow && (
+        <ReelDetailModal
+          row={expandedRow}
+          bd={bdFor(expandedRow)}
+          score={scoreMap.get(expandedRow.id) ?? null}
+          onClose={() => setExpandedId(null)}
         />
-      ))}
-    </div>
+      )}
+    </>
   );
 }

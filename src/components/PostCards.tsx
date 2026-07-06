@@ -73,10 +73,28 @@ function sortValue(r: PostCardRow, key: SortKey, scoreMap?: Map<number, number>)
   }
 }
 
+// median + límites del tercio inferior/superior de la propia distribución —
+// permite clasificar "alto/medio/bajo" según cuánto varía cada métrica en la
+// práctica, en vez de un margen fijo arbitrario (±30%) que no se ajusta a la
+// dispersión real de cada señal.
+export type MetricBand = { median: number; p33: number; p67: number } | null;
 export type Benchmark = {
-  reach: number; er: number; sr: number; lr: number; cr: number;
-  shr: number; watch: number; play: number; skip: number; shares: number;
+  reach: MetricBand; er: MetricBand; sr: MetricBand; lr: MetricBand; cr: MetricBand;
+  shr: MetricBand; watch: MetricBand; play: MetricBand; skip: MetricBand; shares: MetricBand;
 };
+
+function percentile(sortedAsc: number[], p: number): number {
+  const idx = (sortedAsc.length - 1) * p;
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  if (lo === hi) return sortedAsc[lo];
+  return sortedAsc[lo] + (sortedAsc[hi] - sortedAsc[lo]) * (idx - lo);
+}
+
+function band(values: number[]): MetricBand {
+  if (values.length < 3) return null; // muestra insuficiente para terciles confiables
+  const s = [...values].sort((a, b) => a - b);
+  return { median: median(s), p33: percentile(s, 1 / 3), p67: percentile(s, 2 / 3) };
+}
 
 export const isVideo = (r: PostCardRow) => r.mediaType === "REELS" || r.mediaType === "VIDEO";
 
@@ -93,16 +111,16 @@ export function useAlgoScores(rows: PostCardRow[]): { benchmarkByType: { video: 
       const nums = (fn: (r: PostCardRow) => number | null) =>
         pool.map(fn).filter((v): v is number => v != null);
       return {
-        reach:   median(nums(r => r.reach)),
-        er:      median(nums(r => er(r))),
-        sr:      median(nums(r => rate(r.savedCount, r.reach))),
-        lr:      median(nums(r => rate(r.likeCount, r.reach))),
-        cr:      median(nums(r => rate(r.commentCount, r.reach))),
-        shr:     median(nums(r => rate(r.sharesCount, r.reach))),
-        watch:   median(nums(r => r.avgWatchTimeMs)),
-        play:    median(nums(r => rate(r.plays, r.reach))),
-        skip:    median(nums(r => r.skipRate)),
-        shares:  median(nums(r => r.sharesCount)),
+        reach:   band(nums(r => r.reach)),
+        er:      band(nums(r => er(r))),
+        sr:      band(nums(r => rate(r.savedCount, r.reach))),
+        lr:      band(nums(r => rate(r.likeCount, r.reach))),
+        cr:      band(nums(r => rate(r.commentCount, r.reach))),
+        shr:     band(nums(r => rate(r.sharesCount, r.reach))),
+        watch:   band(nums(r => r.avgWatchTimeMs)),
+        play:    band(nums(r => rate(r.plays, r.reach))),
+        skip:    band(nums(r => r.skipRate)),
+        shares:  band(nums(r => r.sharesCount)),
       };
     };
     return {
@@ -128,11 +146,7 @@ export function useAlgoScores(rows: PostCardRow[]): { benchmarkByType: { video: 
 // Weighted composite based on 2026 Instagram signal hierarchy (Mosseri):
 // Shares (#1) > Saves (#2) > Comments (#3) > Watch retention (#4) > Likes (#5)
 // Score 0-100 vs last-10 median. Null if no reach data.
-function algoScore(
-  row: PostCardRow,
-  bd: { shr: number; sr: number; cr: number; lr: number; watch: number; skip: number } | null,
-  video: boolean
-): number | null {
+function algoScore(row: PostCardRow, bd: Benchmark | null, video: boolean): number | null {
   if (!row.reach || !bd) return null;
 
   const shrRate = rate(row.sharesCount, row.reach);
@@ -141,9 +155,9 @@ function algoScore(
   const lkRate  = rate(row.likeCount, row.reach);
 
   // Score metric 0-100 vs median: median = 50, 2x = 100, 0 = 0
-  const sc = (val: number | null, med: number, invert = false): number => {
-    if (val == null || med === 0) return 40; // neutral when no data
-    const r = invert ? med / Math.max(val, 0.001) : val / med;
+  const sc = (val: number | null, mb: MetricBand, invert = false): number => {
+    if (val == null || !mb || mb.median === 0) return 40; // neutral when no data
+    const r = invert ? mb.median / Math.max(val, 0.001) : val / mb.median;
     return Math.min(100, Math.max(0, r * 50));
   };
 
@@ -166,9 +180,10 @@ function algoScore(
 }
 
 // ── Benchmark ────────────────────────────────────────────────────────────────
-// Compara contra el promedio propio: ±30% define "típico".
-// Así no se fuerza que siempre el 25% quede en rojo/verde —
-// si todos los posts andan bien, la mayoría queda en gris.
+// Terciles de la propia distribución (últimos ~10 posts del mismo tipo):
+// "alto" = tercio superior, "bajo" = tercio inferior, el resto es "típico".
+// Se ajusta solo a la dispersión real de cada métrica, en vez de asumir que
+// todas varían lo mismo con un margen fijo.
 export type BmLevel = "top" | "typical" | "low";
 
 function median(values: number[]): number {
@@ -179,11 +194,10 @@ function median(values: number[]): number {
 }
 
 // invert=true: menor es mejor (ej. skip rate)
-export function bm(value: number | null, med: number, invert = false): BmLevel | undefined {
-  if (value == null || med === 0) return undefined;
-  const ratio = value / med;
-  if (invert) return ratio <= 0.7 ? "top" : ratio >= 1.3 ? "low" : "typical";
-  return ratio >= 1.3 ? "top" : ratio <= 0.7 ? "low" : "typical";
+export function bm(value: number | null, mb: MetricBand, invert = false): BmLevel | undefined {
+  if (value == null || !mb || mb.p33 === mb.p67) return undefined;
+  if (invert) return value <= mb.p33 ? "top" : value >= mb.p67 ? "low" : "typical";
+  return value >= mb.p67 ? "top" : value <= mb.p33 ? "low" : "typical";
 }
 const BM_LABEL: Record<BmLevel, string> = { top: "Valor más alto", typical: "Valor típico", low: "Valor más bajo" };
 export const BM_COLOR: Record<BmLevel, string> = { top: "#22c55e", typical: "#6b7280", low: "#ef4444" };
@@ -301,8 +315,141 @@ function FollowerBar({ followers, nonFollowers }: { followers: number; nonFollow
   );
 }
 
+// ── Bloque de stats completo de un post ──────────────────────────────────────
+// Compartido entre la lista Detalle y el modal de detalle que se abre desde la Grilla.
+export function PostDetailBlock({ row, bd, score }: { row: PostCardRow; bd: Benchmark | null; score: number | null }) {
+  const erVal  = er(row);
+  const srVal  = rate(row.savedCount, row.reach);
+  const prVal  = rate(row.plays, row.reach);
+  const lrVal  = rate(row.likeCount, row.reach);
+  const crVal  = rate(row.commentCount, row.reach);
+  const shrVal = rate(row.sharesCount, row.reach);
+  const video  = isVideo(row);
+  const color  = TYPE_COLOR[row.mediaType] ?? "#6b7280";
+  const erGood = erVal != null && erVal >= 0.05;
+  const isViral = bd?.reach && row.reach != null && row.reach >= bd.reach.median * 2.5;
+
+  return (
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.65rem" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.3rem", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "0.68rem", fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.06em", background: `${color}18`, padding: "0.15rem 0.5rem", borderRadius: 20 }}>
+              {TYPE_LABEL[row.mediaType] ?? row.mediaType}
+            </span>
+            <span style={{ fontSize: "0.72rem", color: "var(--text-tertiary)" }}>
+              {row.publishedAt
+                ? new Date(row.publishedAt).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })
+                : "—"}
+            </span>
+            {isViral && (
+              <span style={{ fontSize: "0.65rem", fontWeight: 700, background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.4)", padding: "0.1rem 0.5rem", borderRadius: 20 }}>
+                VIRAL
+              </span>
+            )}
+            {score != null && (
+              <span title="Score de algoritmo: pesa share%, save%, comment%, watch time y like% según su importancia para el algoritmo de Instagram 2026"
+                style={{
+                  fontSize: "0.65rem", fontWeight: 700, padding: "0.1rem 0.5rem", borderRadius: 20,
+                  background: score >= 70 ? "rgba(34,197,94,0.12)" : score >= 45 ? "rgba(107,114,128,0.12)" : "rgba(239,68,68,0.10)",
+                  color: score >= 70 ? "#22c55e" : score >= 45 ? "#6b7280" : "#ef4444",
+                  border: `1px solid ${score >= 70 ? "rgba(34,197,94,0.3)" : score >= 45 ? "rgba(107,114,128,0.25)" : "rgba(239,68,68,0.25)"}`,
+                }}>
+                Score {score}
+              </span>
+            )}
+          </div>
+          <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            {row.caption || <span style={{ color: "var(--text-tertiary)", fontStyle: "italic" }}>Sin caption</span>}
+          </p>
+        </div>
+        {row.igPermalink && (
+          <a href={row.igPermalink} target="_blank" rel="noreferrer"
+            style={{ fontSize: "0.72rem", color: "var(--accent)", whiteSpace: "nowrap", flexShrink: 0, padding: "0.25rem 0.6rem", border: "1px solid rgba(249,115,22,0.3)", borderRadius: 8 }}>
+            Ver →
+          </a>
+        )}
+      </div>
+
+      <div style={{ height: 1, background: "var(--border)" }} />
+
+      {/* Fila 1: métricas absolutas principales */}
+      <div style={{ display: "flex", gap: "0.15rem", flexWrap: "wrap", alignItems: "flex-start" }}>
+        <Stat label="Alcance" value={fmt(row.reach)} accent={!!row.reach}
+          benchmark={bd ? bm(row.reach, bd.reach) : undefined}
+          tooltip="Personas únicas que vieron este post. Base para calcular todo lo demás." />
+        <Div />
+        <Stat label="ER%" value={erVal != null ? `${(erVal * 100).toFixed(1)}%` : "—"} accent={erGood}
+          benchmark={bd ? bm(erVal, bd.er) : undefined}
+          tooltip="Engagement Rate: de cada 100 personas que lo vieron, cuántas reaccionaron (likes + comentarios + guardados + compartidos). Arriba del 5% es muy bueno." />
+        {video && (
+          <><Div />
+            <Stat label="Vistas" value={fmt(row.plays)}
+              tooltip="Total de reproducciones. Puede superar el alcance si alguien lo vio más de una vez." />
+            <Stat label="Play%" value={prVal != null ? `${(prVal * 100).toFixed(1)}%` : "—"}
+              benchmark={bd ? bm(prVal, bd.play) : undefined}
+              tooltip="Reproducciones divididas por alcance. Más de 100% = la gente lo repitió. Cuanto más alto, mejor." />
+            <Stat label="Watch" value={fmtSec(row.avgWatchTimeMs)}
+              benchmark={bd ? bm(row.avgWatchTimeMs, bd.watch) : undefined}
+              tooltip="Tiempo promedio viendo el video antes de salir. Instagram premia los videos que retienen la atención." />
+            {row.skipRate != null && (
+              <Stat label="Skip%" value={`${row.skipRate.toFixed(1)}%`}
+                benchmark={bd ? bm(row.skipRate, bd.skip, true) : undefined}
+                tooltip="Porcentaje que saltó el video sin reproducirlo. Menos es mejor. Si es alto, la miniatura o el primer segundo no enganchan." />
+            )}
+          </>
+        )}
+        <Div />
+        <Stat label="Guard." value={fmt(row.savedCount)}
+          tooltip="Veces que alguien guardó el post. Señal más fuerte para el algoritmo." />
+        <Stat label="Shares" value={fmt(row.sharesCount)}
+          benchmark={bd ? bm(row.sharesCount, bd.shares) : undefined}
+          tooltip="Veces que compartieron por DM o historias. Cada share lleva tu contenido a personas que no te siguen." />
+        <Stat label="Likes" value={fmt(row.likeCount)}
+          tooltip="Cantidad de 'me gusta'. La interacción más básica." />
+        <Stat label="Coment." value={fmt(row.commentCount)}
+          tooltip="Cantidad de comentarios. El algoritmo los valora más que los likes." />
+        {row.repostsCount != null && (
+          <Stat label="Reposts" value={fmt(row.repostsCount)}
+            tooltip="Veces que alguien reposteó este contenido." />
+        )}
+        {/* followsCount and profileVisits not available via Instagram Login API */}
+      </div>
+
+      {/* Fila 2: tasas por señal de algoritmo — ordenadas por peso 2026 */}
+      <div style={{ display: "flex", gap: "0.15rem", flexWrap: "wrap", alignItems: "flex-start", paddingTop: "0.3rem", borderTop: "1px dashed rgba(255,255,255,0.06)" }}>
+        <Stat label="Share%" value={shrVal != null ? `${(shrVal * 100).toFixed(2)}%` : "—"}
+          benchmark={bd ? bm(shrVal, bd.shr) : undefined}
+          tooltip="Señal #1 del algoritmo en 2026 (Adam Mosseri). Compartidos por alcance: cada share lleva tu contenido a personas nuevas." />
+        <Stat label="Guard.%" value={srVal != null ? `${(srVal * 100).toFixed(2)}%` : "—"}
+          benchmark={bd ? bm(srVal, bd.sr) : undefined}
+          tooltip="Señal #2 del algoritmo. Guardados / alcance: si alguien guarda, Instagram impulsa masivamente el post." />
+        <Stat label="Coment.%" value={crVal != null ? `${(crVal * 100).toFixed(2)}%` : "—"}
+          benchmark={bd ? bm(crVal, bd.cr) : undefined}
+          tooltip="Señal #3. Comentarios / alcance. Pequeño porcentaje pero muy valioso — más peso que los likes." />
+        <Stat label="Like%" value={lrVal != null ? `${(lrVal * 100).toFixed(1)}%` : "—"}
+          benchmark={bd ? bm(lrVal, bd.lr) : undefined}
+          tooltip="Señal #4. Likes / alcance. La interacción más básica, la menos valorada por el algoritmo hoy." />
+      </div>
+
+      {/* Follower bar + retention curve */}
+      {(row.followersReach != null && row.nonFollowersReach != null) || (video && row.avgWatchTimeMs != null && row.videoDurationMs != null) ? (
+        <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap", paddingTop: "0.2rem" }}>
+          {row.followersReach != null && row.nonFollowersReach != null && (
+            <FollowerBar followers={row.followersReach} nonFollowers={row.nonFollowersReach} />
+          )}
+          {video && row.avgWatchTimeMs != null && row.videoDurationMs != null && (
+            <RetentionCurve avgWatchMs={row.avgWatchTimeMs} durationMs={row.videoDurationMs} />
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // ── Thumbnail ─────────────────────────────────────────────────────────────────
-function Thumbnail({ row }: { row: PostCardRow }) {
+export function Thumbnail({ row }: { row: PostCardRow }) {
   const [failed, setFailed] = useState(false);
   const isVideo = row.mediaType === "REELS" || row.mediaType === "VIDEO";
 
@@ -364,18 +511,9 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
         {sorted.map((row) => {
-          const erVal  = er(row);
-          const srVal  = rate(row.savedCount, row.reach);
-          const prVal  = rate(row.plays, row.reach);
-          const lrVal  = rate(row.likeCount, row.reach);
-          const crVal  = rate(row.commentCount, row.reach);
-          const shrVal = rate(row.sharesCount, row.reach);
-          const video  = isVideo(row);
-          const color  = TYPE_COLOR[row.mediaType] ?? "#6b7280";
-          const erGood = erVal != null && erVal >= 0.05;
-          const bd     = video ? benchmarkByType.video : benchmarkByType.image;
-          const score  = scoreMap.get(row.id) ?? null;
-          const isViral = bd && row.reach != null && row.reach >= bd.reach * 2.5;
+          const video = isVideo(row);
+          const bd    = video ? benchmarkByType.video : benchmarkByType.image;
+          const score = scoreMap.get(row.id) ?? null;
 
           return (
             <div key={row.id} style={{
@@ -383,122 +521,7 @@ export function PostCards({ rows }: { rows: PostCardRow[] }) {
               border: "1px solid var(--border)", borderRadius: 14, padding: "1rem",
             }}>
               <Thumbnail row={row} />
-
-              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.65rem" }}>
-                {/* Header */}
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.3rem", flexWrap: "wrap" }}>
-                      <span style={{ fontSize: "0.68rem", fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.06em", background: `${color}18`, padding: "0.15rem 0.5rem", borderRadius: 20 }}>
-                        {TYPE_LABEL[row.mediaType] ?? row.mediaType}
-                      </span>
-                      <span style={{ fontSize: "0.72rem", color: "var(--text-tertiary)" }}>
-                        {row.publishedAt
-                          ? new Date(row.publishedAt).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })
-                          : "—"}
-                      </span>
-                      {isViral && (
-                        <span style={{ fontSize: "0.65rem", fontWeight: 700, background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.4)", padding: "0.1rem 0.5rem", borderRadius: 20 }}>
-                          VIRAL
-                        </span>
-                      )}
-                      {score != null && (
-                        <span title="Score de algoritmo: pesa share%, save%, comment%, watch time y like% según su importancia para el algoritmo de Instagram 2026"
-                          style={{
-                            fontSize: "0.65rem", fontWeight: 700, padding: "0.1rem 0.5rem", borderRadius: 20,
-                            background: score >= 70 ? "rgba(34,197,94,0.12)" : score >= 45 ? "rgba(107,114,128,0.12)" : "rgba(239,68,68,0.10)",
-                            color: score >= 70 ? "#22c55e" : score >= 45 ? "#6b7280" : "#ef4444",
-                            border: `1px solid ${score >= 70 ? "rgba(34,197,94,0.3)" : score >= 45 ? "rgba(107,114,128,0.25)" : "rgba(239,68,68,0.25)"}`,
-                          }}>
-                          Score {score}
-                        </span>
-                      )}
-                    </div>
-                    <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                      {row.caption || <span style={{ color: "var(--text-tertiary)", fontStyle: "italic" }}>Sin caption</span>}
-                    </p>
-                  </div>
-                  {row.igPermalink && (
-                    <a href={row.igPermalink} target="_blank" rel="noreferrer"
-                      style={{ fontSize: "0.72rem", color: "var(--accent)", whiteSpace: "nowrap", flexShrink: 0, padding: "0.25rem 0.6rem", border: "1px solid rgba(249,115,22,0.3)", borderRadius: 8 }}>
-                      Ver →
-                    </a>
-                  )}
-                </div>
-
-                <div style={{ height: 1, background: "var(--border)" }} />
-
-                {/* Fila 1: métricas absolutas principales */}
-                <div style={{ display: "flex", gap: "0.15rem", flexWrap: "wrap", alignItems: "flex-start" }}>
-                  <Stat label="Alcance" value={fmt(row.reach)} accent={!!row.reach}
-                    benchmark={bd ? bm(row.reach, bd.reach) : undefined}
-                    tooltip="Personas únicas que vieron este post. Base para calcular todo lo demás." />
-                  <Div />
-                  <Stat label="ER%" value={erVal != null ? `${(erVal * 100).toFixed(1)}%` : "—"} accent={erGood}
-                    benchmark={bd ? bm(erVal, bd.er) : undefined}
-                    tooltip="Engagement Rate: de cada 100 personas que lo vieron, cuántas reaccionaron (likes + comentarios + guardados + compartidos). Arriba del 5% es muy bueno." />
-                  {video && (
-                    <><Div />
-                      <Stat label="Vistas" value={fmt(row.plays)}
-                        tooltip="Total de reproducciones. Puede superar el alcance si alguien lo vio más de una vez." />
-                      <Stat label="Play%" value={prVal != null ? `${(prVal * 100).toFixed(1)}%` : "—"}
-                        benchmark={bd ? bm(prVal, bd.play) : undefined}
-                        tooltip="Reproducciones divididas por alcance. Más de 100% = la gente lo repitió. Cuanto más alto, mejor." />
-                      <Stat label="Watch" value={fmtSec(row.avgWatchTimeMs)}
-                        benchmark={bd ? bm(row.avgWatchTimeMs, bd.watch) : undefined}
-                        tooltip="Tiempo promedio viendo el video antes de salir. Instagram premia los videos que retienen la atención." />
-                      {row.skipRate != null && (
-                        <Stat label="Skip%" value={`${row.skipRate.toFixed(1)}%`}
-                          benchmark={bd ? bm(row.skipRate, bd.skip, true) : undefined}
-                          tooltip="Porcentaje que saltó el video sin reproducirlo. Menos es mejor. Si es alto, la miniatura o el primer segundo no enganchan." />
-                      )}
-                    </>
-                  )}
-                  <Div />
-                  <Stat label="Guard." value={fmt(row.savedCount)}
-                    tooltip="Veces que alguien guardó el post. Señal más fuerte para el algoritmo." />
-                  <Stat label="Shares" value={fmt(row.sharesCount)}
-                    benchmark={bd ? bm(row.sharesCount, bd.shares) : undefined}
-                    tooltip="Veces que compartieron por DM o historias. Cada share lleva tu contenido a personas que no te siguen." />
-                  <Stat label="Likes" value={fmt(row.likeCount)}
-                    tooltip="Cantidad de 'me gusta'. La interacción más básica." />
-                  <Stat label="Coment." value={fmt(row.commentCount)}
-                    tooltip="Cantidad de comentarios. El algoritmo los valora más que los likes." />
-                  {row.repostsCount != null && (
-                    <Stat label="Reposts" value={fmt(row.repostsCount)}
-                      tooltip="Veces que alguien reposteó este contenido." />
-                  )}
-                  {/* followsCount and profileVisits not available via Instagram Login API */}
-                </div>
-
-                {/* Fila 2: tasas por señal de algoritmo — ordenadas por peso 2026 */}
-                <div style={{ display: "flex", gap: "0.15rem", flexWrap: "wrap", alignItems: "flex-start", paddingTop: "0.3rem", borderTop: "1px dashed rgba(255,255,255,0.06)" }}>
-                  <Stat label="Share%" value={shrVal != null ? `${(shrVal * 100).toFixed(2)}%` : "—"}
-                    benchmark={bd ? bm(shrVal, bd.shr) : undefined}
-                    tooltip="Señal #1 del algoritmo en 2026 (Adam Mosseri). Compartidos por alcance: cada share lleva tu contenido a personas nuevas." />
-                  <Stat label="Guard.%" value={srVal != null ? `${(srVal * 100).toFixed(2)}%` : "—"}
-                    benchmark={bd ? bm(srVal, bd.sr) : undefined}
-                    tooltip="Señal #2 del algoritmo. Guardados / alcance: si alguien guarda, Instagram impulsa masivamente el post." />
-                  <Stat label="Coment.%" value={crVal != null ? `${(crVal * 100).toFixed(2)}%` : "—"}
-                    benchmark={bd ? bm(crVal, bd.cr) : undefined}
-                    tooltip="Señal #3. Comentarios / alcance. Pequeño porcentaje pero muy valioso — más peso que los likes." />
-                  <Stat label="Like%" value={lrVal != null ? `${(lrVal * 100).toFixed(1)}%` : "—"}
-                    benchmark={bd ? bm(lrVal, bd.lr) : undefined}
-                    tooltip="Señal #4. Likes / alcance. La interacción más básica, la menos valorada por el algoritmo hoy." />
-                </div>
-
-                {/* Follower bar + retention curve */}
-                {(row.followersReach != null && row.nonFollowersReach != null) || (video && row.avgWatchTimeMs != null && row.videoDurationMs != null) ? (
-                  <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap", paddingTop: "0.2rem" }}>
-                    {row.followersReach != null && row.nonFollowersReach != null && (
-                      <FollowerBar followers={row.followersReach} nonFollowers={row.nonFollowersReach} />
-                    )}
-                    {video && row.avgWatchTimeMs != null && row.videoDurationMs != null && (
-                      <RetentionCurve avgWatchMs={row.avgWatchTimeMs} durationMs={row.videoDurationMs} />
-                    )}
-                  </div>
-                ) : null}
-              </div>
+              <PostDetailBlock row={row} bd={bd} score={score} />
             </div>
           );
         })}

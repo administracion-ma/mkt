@@ -1,6 +1,6 @@
 import { and, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
-import { posts } from "@/db/schema";
+import { posts, accountMetrics } from "@/db/schema";
 import { weeklyReach, bestTimeHeatmap, hookRanking, pillarPerformance, hashtagPerformance } from "@/lib/insights";
 import { WeeklyReachChart, FollowersChart, BestTimeHeatmap, HookDiagnosis, PillarLeaderboard, HashtagPerformance } from "@/components/InsightsPanels";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
@@ -69,7 +69,13 @@ export default async function AnalyticsPage({
     }),
     // .catch: la tabla se crea con la migración; hasta entonces el panel muestra placeholder
     db.query.accountMetrics
-      .findMany({ orderBy: (a, { asc }) => [asc(a.capturedAt)] })
+      .findMany({
+        where: and(
+          fromDate ? gte(accountMetrics.capturedAt, fromDate) : undefined,
+          toDate ? lte(accountMetrics.capturedAt, toDate) : undefined,
+        ),
+        orderBy: (a, { asc }) => [asc(a.capturedAt)],
+      })
       .catch(() => []),
     db.query.pillars.findMany(),
   ]);
@@ -163,7 +169,11 @@ export default async function AnalyticsPage({
   const lastSyncAt = allMetrics[0]?.capturedAt?.toISOString() ?? null;
 
   // Insights agregados
-  const weekPoints = weeklyReach(rows);
+  // Cantidad de semanas del gráfico según el período elegido (4 mín., 12 tope) —
+  // si filtrás a "última semana" no tiene sentido mostrar 12 semanas de contexto vacío.
+  const periodDays = Math.max(1, Math.round((resolvedTo.getTime() - resolvedFrom.getTime()) / (1000 * 60 * 60 * 24)));
+  const weeksToShow = Math.min(12, Math.max(4, Math.ceil(periodDays / 7)));
+  const weekPoints = weeklyReach(rows, weeksToShow, resolvedTo);
   const heatmap = bestTimeHeatmap(rows);
   const hooks = hookRanking(rows);
   const pillarStats = pillarPerformance(rows, allPillars);
@@ -277,10 +287,14 @@ export default async function AnalyticsPage({
         )}
       </div>
 
-      {/* Insights: tendencias y diagnóstico */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1rem", margin: "1.5rem 0" }}>
+      {/* Insights: tendencias — necesitan más ancho para leerse bien */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(480px, 1fr))", gap: "1rem", marginTop: "1.5rem" }}>
         <WeeklyReachChart points={weekPoints} />
         <FollowersChart points={followerPoints} />
+      </div>
+
+      {/* Insights: diagnóstico y rankings */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1rem", margin: "1rem 0 1.5rem" }}>
         <BestTimeHeatmap cells={heatmap.cells} best={heatmap.best} />
         <HookDiagnosis best={hooks.best} worst={hooks.worst} medianSkip={hooks.medianSkip} />
         <PillarLeaderboard stats={pillarStats} />
