@@ -106,6 +106,45 @@ function AdTile({ ad, bench, onExpand }: { ad: AdSummary; bench: AdBenchmark; on
   );
 }
 
+function daysRunning(metaCreatedAt: string | null): number | null {
+  if (!metaCreatedAt) return null;
+  return Math.max(0, Math.round((Date.now() - new Date(metaCreatedAt).getTime()) / 86_400_000));
+}
+
+// Diagnóstico accionable: combina fatiga (frecuencia) con la variación real
+// de costo/resultado mes a mes — no alcanza con "la frecuencia está alta",
+// importa si ADEMÁS el rendimiento se está deteriorando.
+function diagnoseAd(ad: AdSummary, months: ReturnType<typeof adMonthlyTrend>) {
+  const fatigued = ad.frequency != null && ad.frequency >= 4;
+  const last = months[months.length - 1];
+  const prev = months[months.length - 2];
+  const worsening = last?.costPerResult != null && prev?.costPerResult != null && last.costPerResult > prev.costPerResult * 1.1;
+
+  if (fatigued && worsening) {
+    return { level: "bad" as const, text: "Fatiga de creativo + costo por resultado en alza dos meses seguidos — recomendación: renovar la pieza." };
+  }
+  if (worsening) {
+    return { level: "warn" as const, text: "El costo por resultado subió respecto al mes anterior — vale la pena vigilarlo." };
+  }
+  if (fatigued) {
+    return { level: "warn" as const, text: "Frecuencia alta (la misma audiencia ya lo vio varias veces), aunque el rendimiento todavía se sostiene." };
+  }
+  return null;
+}
+
+function DiagnosisBanner({ diagnosis }: { diagnosis: NonNullable<ReturnType<typeof diagnoseAd>> }) {
+  const color = diagnosis.level === "bad" ? "#ef4444" : "#eab308";
+  return (
+    <div style={{
+      display: "flex", gap: "0.5rem", alignItems: "flex-start", marginTop: "1rem",
+      padding: "0.6rem 0.75rem", borderRadius: 10, background: "var(--surface2)", borderLeft: `3px solid ${color}`,
+    }}>
+      <span>{diagnosis.level === "bad" ? "🔴" : "🟡"}</span>
+      <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>{diagnosis.text}</span>
+    </div>
+  );
+}
+
 function AdDetailModal({
   ad, bench, monthlyRows, onClose,
 }: {
@@ -116,6 +155,8 @@ function AdDetailModal({
 }) {
   const months = adMonthlyTrend(monthlyRows, ad.adId);
   const hasMessages = months.some((m) => m.messages > 0);
+  const running = daysRunning(ad.metaCreatedAt);
+  const diagnosis = diagnoseAd(ad, months);
 
   return (
     <div className="reel-modal-overlay" onClick={onClose}>
@@ -127,10 +168,14 @@ function AdDetailModal({
           </div>
           <div style={{ flex: 1, minWidth: 220 }}>
             <p style={{ margin: "0 0 0.3rem", fontSize: "0.9rem", fontWeight: 700 }}>{ad.name}</p>
-            <p style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", color: "var(--text-tertiary)" }}>{ad.campaignName}</p>
+            <p style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", color: "var(--text-tertiary)" }}>
+              {ad.campaignName}{running != null ? ` · corriendo hace ${running} día${running !== 1 ? "s" : ""}` : ""}
+            </p>
             <AdMiniGrid ad={ad} bench={bench} />
           </div>
         </div>
+
+        {diagnosis && <DiagnosisBanner diagnosis={diagnosis} />}
 
         {months.length >= 2 ? (
           <>

@@ -158,6 +158,7 @@ export interface AdMeta {
   creativeId: string | null;
   thumbnailUrl: string | null;
   isVideo: boolean;
+  metaCreatedAt: string | null; // fecha real en que se creó el anuncio en Meta
 }
 
 // Metadata + creativo de cada anuncio individual — para poder mostrar la
@@ -169,10 +170,11 @@ export async function getAds(adAccountId: string, accessToken: string): Promise<
       name: string;
       status: string;
       campaign_id: string;
+      created_time?: string;
       creative?: { id?: string; thumbnail_url?: string; video_id?: string };
     }>;
   }>(`/${adAccountId}/ads`, {
-    fields: "id,name,status,campaign_id,creative{id,thumbnail_url,video_id}",
+    fields: "id,name,status,campaign_id,created_time,creative{id,thumbnail_url,video_id}",
     limit: "300",
     access_token: accessToken,
   });
@@ -185,6 +187,7 @@ export async function getAds(adAccountId: string, accessToken: string): Promise<
     creativeId: a.creative?.id ?? null,
     thumbnailUrl: a.creative?.thumbnail_url ?? null,
     isVideo: !!a.creative?.video_id,
+    metaCreatedAt: a.created_time ?? null,
   }));
 }
 

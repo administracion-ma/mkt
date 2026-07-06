@@ -161,6 +161,10 @@ export async function applyMigration(): Promise<void> {
   `);
 
   await db.execute(sql`
+    ALTER TABLE ads ADD COLUMN IF NOT EXISTS meta_created_at timestamptz;
+  `);
+
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS ad_creative_insights (
       id serial PRIMARY KEY,
       ad_id integer NOT NULL REFERENCES ads(id),

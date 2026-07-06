@@ -36,7 +36,12 @@ export default async function AdsPage({
   const toDate = to ? new Date(to + "T23:59:59") : new Date();
   const fromDate = from ? new Date(from + "T00:00:00") : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const [campaigns, insightRows, adList, adInsightRows, usdRate] = await Promise.all([
+  // El historial mensual por anuncio ("¿algún mes empeoró?") tiene que mirar
+  // mucho más atrás que el período elegido arriba de la página — si no, con
+  // el filtro default de 30 días nunca se ven más de 1-2 meses para comparar.
+  const monthlyWindowStart = new Date(toDate.getTime() - 400 * 24 * 60 * 60 * 1000);
+
+  const [campaigns, insightRows, adList, adInsightRows, allAdInsightRows, usdRate] = await Promise.all([
     db.query.adCampaigns.findMany(),
     db.query.adInsights.findMany({
       where: and(gte(adInsights.date, fromDate), lte(adInsights.date, toDate)),
@@ -45,6 +50,10 @@ export default async function AdsPage({
     db.query.ads.findMany(),
     db.query.adCreativeInsights.findMany({
       where: and(gte(adCreativeInsights.date, fromDate), lte(adCreativeInsights.date, toDate)),
+      orderBy: (i, { asc }) => [asc(i.date)],
+    }),
+    db.query.adCreativeInsights.findMany({
+      where: gte(adCreativeInsights.date, monthlyWindowStart),
       orderBy: (i, { asc }) => [asc(i.date)],
     }),
     getUsdRate(account.currency),
@@ -78,7 +87,7 @@ export default async function AdsPage({
   const campaignStats = campaignSummaries(rows);
 
   const adById = new Map(adList.map((a) => [a.id, a]));
-  const adRows: AdCreativeRow[] = adInsightRows.map((i) => {
+  const toAdCreativeRow = (i: (typeof adInsightRows)[number]): AdCreativeRow => {
     const a = adById.get(i.adId);
     const campaign = a ? campaignById.get(a.campaignId) : undefined;
     return {
@@ -88,6 +97,7 @@ export default async function AdsPage({
       campaignName: campaign?.name ?? "—",
       thumbnailUrl: a?.thumbnailUrl ?? null,
       isVideo: a?.isVideo ?? false,
+      metaCreatedAt: a?.metaCreatedAt ? a.metaCreatedAt.toISOString() : null,
       date: i.date.toISOString(),
       spend: toUsdOrRaw(i.spend),
       impressions: i.impressions,
@@ -98,10 +108,15 @@ export default async function AdsPage({
       results: i.results,
       messages: i.messages,
     };
-  });
+  };
 
+  const adRows: AdCreativeRow[] = adInsightRows.map(toAdCreativeRow);
   const adStats = adSummaries(adRows);
   const bench = adBenchmark(adStats);
+
+  // Mismo mapeo que adRows, pero sobre la ventana larga — exclusivamente para
+  // alimentar el historial mensual del modal de cada anuncio.
+  const allAdRows: AdCreativeRow[] = allAdInsightRows.map(toAdCreativeRow);
 
   const totalSpend = rows.reduce((s, r) => s + (r.spend ?? 0), 0);
   const totalImpressions = rows.reduce((s, r) => s + (r.impressions ?? 0), 0);
@@ -181,7 +196,7 @@ export default async function AdsPage({
         <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "1.25rem", color: "var(--text-secondary)" }}>
           {campaignStats.length} campaña{campaignStats.length !== 1 ? "s" : ""} · {adStats.length} anuncio{adStats.length !== 1 ? "s" : ""} · {periodLabel}
         </h2>
-        <AdsView campaigns={campaignStats} ads={adStats} bench={bench} adRows={adRows} />
+        <AdsView campaigns={campaignStats} ads={adStats} bench={bench} adRows={allAdRows} />
       </div>
     </main>
   );

@@ -101,6 +101,7 @@ export async function syncAdData(
       creativeId: a.creativeId,
       thumbnailUrl: a.thumbnailUrl,
       isVideo: a.isVideo,
+      metaCreatedAt: a.metaCreatedAt ? new Date(a.metaCreatedAt) : null,
       updatedAt: new Date(),
     };
     if (existing) {

@@ -89,6 +89,7 @@ export type AdCreativeRow = {
   campaignName: string;
   thumbnailUrl: string | null;
   isVideo: boolean;
+  metaCreatedAt: string | null;
   date: string; // ISO
   spend: number | null;
   impressions: number | null;
@@ -107,6 +108,7 @@ export type AdSummary = {
   campaignName: string;
   thumbnailUrl: string | null;
   isVideo: boolean;
+  metaCreatedAt: string | null;
   spend: number;
   impressions: number;
   clicks: number;
@@ -142,6 +144,7 @@ export function adSummaries(rows: AdCreativeRow[]): AdSummary[] {
       campaignName: rs[0].campaignName,
       thumbnailUrl: rs[0].thumbnailUrl,
       isVideo: rs[0].isVideo,
+      metaCreatedAt: rs[0].metaCreatedAt,
       spend,
       impressions,
       clicks,

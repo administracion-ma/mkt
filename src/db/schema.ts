@@ -184,6 +184,7 @@ export const ads = pgTable("ads", {
   creativeId: text("creative_id"),
   thumbnailUrl: text("thumbnail_url"),
   isVideo: boolean("is_video").notNull().default(false),
+  metaCreatedAt: timestamp("meta_created_at", { withTimezone: true }), // fecha real de creación en Meta, no la nuestra de sync
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
