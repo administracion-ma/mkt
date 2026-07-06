@@ -164,19 +164,21 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignSummary[] }) {
 
 // ── Mini barras mensuales (para "¿algún mes empeoró?") ────────────────────────
 export function MiniMonthBars({
-  points, label, color, formatValue,
+  points, label, color, formatValue, formatLabel,
 }: {
   points: MonthPoint[];
   label: string;
   color: string;
   formatValue: (p: MonthPoint) => number;
+  formatLabel?: (v: number) => string;
 }) {
   const withData = points.filter((p) => formatValue(p) > 0);
   if (withData.length < 2) return null;
 
-  const W = 400, H = 110, PAD_B = 20, PAD_T = 16;
+  const fmtLabel = formatLabel ?? ((v: number) => v.toLocaleString("es-AR"));
+  const W = 400, H = 130, PAD_B = 20, PAD_T = 24;
   const max = Math.max(...points.map(formatValue), 1);
-  const barGap = 6;
+  const barGap = 10;
   const barW = Math.max(8, Math.floor(W / points.length) - barGap);
 
   return (
@@ -194,8 +196,11 @@ export function MiniMonthBars({
           return (
             <g key={p.month}>
               <rect x={x} y={y} width={barW} height={h} rx={2} fill={color}>
-                <title>{`${monthLabel}: ${val.toLocaleString("es-AR")}`}</title>
+                <title>{`${monthLabel}: ${fmtLabel(val)}`}</title>
               </rect>
+              <text x={x + barW / 2} y={y - 6} textAnchor="middle" fontSize={10} fontWeight={700} fill="var(--text)">
+                {fmtLabel(val)}
+              </text>
               <text x={x + barW / 2} y={H - 6} textAnchor="middle" fontSize={9} fill="var(--text-tertiary)">
                 {monthLabel}
               </text>
@@ -203,6 +208,61 @@ export function MiniMonthBars({
           );
         })}
       </svg>
+    </div>
+  );
+}
+
+// ── Tabla mensual con variación mes a mes ─────────────────────────────────────
+// El diagnóstico real de "¿empeoró?" no es el gasto (eso lo controlás vos),
+// es el costo/resultado y el CTR — por eso se resalta la variación de esos dos.
+function pctChange(curr: number | null, prev: number | null): number | null {
+  if (curr == null || prev == null || prev === 0) return null;
+  return ((curr - prev) / prev) * 100;
+}
+
+function DeltaBadge({ pct, invert }: { pct: number | null; invert?: boolean }) {
+  if (pct == null || Math.abs(pct) < 1) return <span style={{ color: "var(--text-tertiary)" }}>—</span>;
+  const isImprovement = invert ? pct < 0 : pct > 0;
+  const color = isImprovement ? "#22c55e" : "#ef4444";
+  const arrow = pct > 0 ? "▲" : "▼";
+  return <span style={{ color, fontWeight: 700 }}>{arrow} {Math.abs(pct).toFixed(0)}%</span>;
+}
+
+export function MonthlyTrendTable({ months }: { months: MonthPoint[] }) {
+  if (months.length < 2) return null;
+
+  return (
+    <div style={{ overflowX: "auto", marginTop: "1rem" }}>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Mes</th>
+            <th className="num">Gasto</th>
+            <th className="num">Resultados</th>
+            <th className="num">Costo/result.</th>
+            <th className="num">vs. mes ant.</th>
+            <th className="num">CTR</th>
+            <th className="num">vs. mes ant.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {months.map((m, i) => {
+            const prev = i > 0 ? months[i - 1] : null;
+            const monthLabel = new Date(`${m.month}-01T00:00:00`).toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+            return (
+              <tr key={m.month}>
+                <td style={{ textTransform: "capitalize" }}>{monthLabel}</td>
+                <td className="num">{fmtMoney(m.spend)}</td>
+                <td className="num">{m.results || "—"}</td>
+                <td className="num">{fmtMoney(m.costPerResult)}</td>
+                <td className="num">{prev ? <DeltaBadge pct={pctChange(m.costPerResult, prev.costPerResult)} invert /> : "—"}</td>
+                <td className="num">{m.ctr != null ? `${m.ctr.toFixed(2)}%` : "—"}</td>
+                <td className="num">{prev ? <DeltaBadge pct={pctChange(m.ctr, prev.ctr)} /> : "—"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

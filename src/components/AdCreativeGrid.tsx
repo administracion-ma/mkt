@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AdSummary, AdBenchmark, AdCreativeRow } from "@/lib/ads-insights";
 import { bm, BM_COLOR, adMonthlyTrend } from "@/lib/ads-insights";
-import { fmtMoney, fmt, MiniMonthBars } from "./AdsPanels";
+import { fmtMoney, fmt, MiniMonthBars, MonthlyTrendTable } from "./AdsPanels";
 
 const STATUS_COLOR: Record<string, string> = { ACTIVE: "#22c55e", PAUSED: "#eab308", ARCHIVED: "#6b7280", DELETED: "#ef4444" };
 const STATUS_LABEL: Record<string, string> = { ACTIVE: "Activo", PAUSED: "Pausado", ARCHIVED: "Archivado", DELETED: "Eliminado" };
@@ -134,10 +134,11 @@ function AdDetailModal({
 
         {months.length >= 2 ? (
           <>
-            <MiniMonthBars points={months} label="Gasto" color="#CC7508" formatValue={(p) => p.spend} />
+            <MiniMonthBars points={months} label="Gasto" color="#CC7508" formatValue={(p) => p.spend} formatLabel={(v) => fmtMoney(v)} />
             {hasMessages && (
               <MiniMonthBars points={months} label="Mensajes" color="#3b82f6" formatValue={(p) => p.messages} />
             )}
+            <MonthlyTrendTable months={months} />
           </>
         ) : (
           <p style={{ fontSize: "0.75rem", color: "var(--text-tertiary)", marginTop: "1rem" }}>
