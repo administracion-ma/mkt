@@ -88,7 +88,7 @@ export function PeriodFilter() {
               fontFamily: "inherit",
               borderRadius: "6px",
               cursor: "pointer",
-              border: `1px solid ${isActive ? "rgba(247,147,26,0.4)" : "var(--border)"}`,
+              border: `1px solid ${isActive ? "rgba(191,138,30,0.4)" : "var(--border)"}`,
               background: isActive ? "var(--accent-dim)" : "var(--surface2)",
               color: isActive ? "var(--accent)" : "var(--text-secondary)",
               transition: "all 0.15s",

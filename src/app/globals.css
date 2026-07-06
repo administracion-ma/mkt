@@ -3,8 +3,8 @@
   --surface: #141414;
   --surface2: #1C1C1C;
   --border: #262626;
-  --accent: #F7931A;
-  --accent-dim: rgba(247, 147, 26, 0.12);
+  --accent: #BF8A1E;
+  --accent-dim: rgba(191, 138, 30, 0.12);
   --text: #F5F5F5;
   --text-secondary: #888;
   --text-tertiary: #555;
@@ -18,7 +18,13 @@
 
 html, body {
   min-height: 100%;
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 50% -10%, rgba(191,138,30,0.12), transparent 55%),
+    radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: auto, 24px 24px;
+  background-repeat: no-repeat, repeat;
+  background-attachment: fixed, fixed;
   color: var(--text);
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
@@ -44,26 +50,23 @@ a { color: inherit; text-decoration: none; }
 .nav-logo {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-weight: 700;
+  gap: 0.55rem;
+  font-weight: 800;
   font-size: 0.95rem;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
   color: var(--text);
   margin-right: 1.5rem;
   flex-shrink: 0;
 }
 
 .nav-logo-icon {
-  width: 26px;
-  height: 26px;
-  background: var(--accent);
-  border-radius: 6px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 900;
-  color: #000;
+  flex-shrink: 0;
 }
 
 .nav-links { display: flex; gap: 0.125rem; flex: 1; }
@@ -99,7 +102,7 @@ a { color: inherit; text-decoration: none; }
 .page { max-width: 1060px; margin: 0 auto; padding: 2.25rem 1.5rem 4rem; }
 
 .page-header { margin-bottom: 1.75rem; }
-.page-title { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.03em; }
+.page-title { font-size: 1.45rem; font-weight: 800; letter-spacing: -0.035em; }
 .page-subtitle { color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.2rem; }
 
 /* CARDS */
@@ -126,7 +129,7 @@ a { color: inherit; text-decoration: none; }
   padding: 1.25rem 1.25rem 1rem;
   transition: border-color 0.2s;
 }
-.stat-card:hover { border-color: rgba(247,147,26,0.4); }
+.stat-card:hover { border-color: rgba(191,138,30,0.4); }
 
 .stat-label {
   font-size: 0.7rem;
@@ -138,7 +141,7 @@ a { color: inherit; text-decoration: none; }
 }
 .stat-value {
   font-size: 1.75rem;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.04em;
   line-height: 1;
 }
