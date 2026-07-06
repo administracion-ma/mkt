@@ -26,7 +26,7 @@ export type PostCardRow = {
   videoDurationMs: number | null;
 };
 
-function fmt(n: number | null | undefined): string {
+export function fmt(n: number | null | undefined): string {
   if (n == null) return "—";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
@@ -37,18 +37,18 @@ function fmtSec(ms: number | null | undefined): string {
   const s = ms / 1000;
   return s >= 60 ? `${Math.floor(s / 60)}m${Math.round(s % 60)}s` : `${s.toFixed(1)}s`;
 }
-function er(r: PostCardRow): number | null {
+export function er(r: PostCardRow): number | null {
   if (!r.reach) return null;
   return ((r.likeCount ?? 0) + (r.commentCount ?? 0) + (r.savedCount ?? 0) + (r.sharesCount ?? 0)) / r.reach;
 }
-function rate(num: number | null | undefined, denom: number | null | undefined): number | null {
+export function rate(num: number | null | undefined, denom: number | null | undefined): number | null {
   if (!denom || num == null) return null;
   return num / denom;
 }
 
-const TYPE_ICON: Record<string, string>  = { REELS: "▶", VIDEO: "▶", CAROUSEL_ALBUM: "⊞", IMAGE: "◻" };
-const TYPE_LABEL: Record<string, string> = { REELS: "Reel", VIDEO: "Video", CAROUSEL_ALBUM: "Carrusel", IMAGE: "Imagen" };
-const TYPE_COLOR: Record<string, string> = { REELS: "#f97316", VIDEO: "#3b82f6", CAROUSEL_ALBUM: "#a855f7", IMAGE: "#6b7280" };
+export const TYPE_ICON: Record<string, string>  = { REELS: "▶", VIDEO: "▶", CAROUSEL_ALBUM: "⊞", IMAGE: "◻" };
+export const TYPE_LABEL: Record<string, string> = { REELS: "Reel", VIDEO: "Video", CAROUSEL_ALBUM: "Carrusel", IMAGE: "Imagen" };
+export const TYPE_COLOR: Record<string, string> = { REELS: "#f97316", VIDEO: "#3b82f6", CAROUSEL_ALBUM: "#a855f7", IMAGE: "#6b7280" };
 
 type SortKey = "date" | "reach" | "er" | "saves" | "shares" | "plays" | "score";
 const SORT_LABELS: { key: SortKey; label: string }[] = [
@@ -256,12 +256,13 @@ function Thumbnail({ row }: { row: PostCardRow }) {
   const isVideo = row.mediaType === "REELS" || row.mediaType === "VIDEO";
 
   if (row.mediaUrl && !failed) {
+    const src = `/api/media/${row.id}`;
     return (
       <div style={{ position: "relative", width: 112, minWidth: 112, height: 152, borderRadius: 10, overflow: "hidden", background: "#111" }}>
         {isVideo
-          ? <video src={row.mediaUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          ? <video src={src} style={{ width: "100%", height: "100%", objectFit: "cover" }}
               muted playsInline preload="metadata" onError={() => setFailed(true)} />
-          : <img src={row.mediaUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          : <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}
               onError={() => setFailed(true)} />
         }
         {isVideo && (

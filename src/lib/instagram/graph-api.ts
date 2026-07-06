@@ -1,11 +1,11 @@
 const GRAPH_BASE = "https://graph.instagram.com";
 
-async function graphGet<T>(path: string, params: Record<string, string>): Promise<T> {
+async function graphGet<T>(path: string, params: Record<string, string>, revalidateSeconds?: number): Promise<T> {
   const url = new URL(`${GRAPH_BASE}${path}`);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), revalidateSeconds != null ? { next: { revalidate: revalidateSeconds } } : undefined);
   const body = await res.json();
   if (!res.ok) {
     throw new Error(`Graph API error en ${path}: ${JSON.stringify(body)}`);
@@ -124,6 +124,18 @@ export async function getAllInstagramMedia(
   }
 
   return allMedia;
+}
+
+// Los media_url que devuelve la Graph API son URLs firmadas de la CDN de Meta
+// que expiran — nunca hay que guardarlas como definitivas. Se pide una fresca
+// cada vez que hace falta mostrar el preview.
+export async function getFreshMediaUrl(igMediaId: string, accessToken: string): Promise<string | null> {
+  const data = await graphGet<{ media_url?: string; thumbnail_url?: string }>(
+    `/${igMediaId}`,
+    { fields: "media_url,thumbnail_url", access_token: accessToken },
+    1800 // cachear 30min — evita repetir la llamada por cada vista de la misma miniatura
+  );
+  return data.media_url ?? data.thumbnail_url ?? null;
 }
 
 async function graphPost<T>(path: string, params: Record<string, string>): Promise<T> {

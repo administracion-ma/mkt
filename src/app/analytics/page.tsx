@@ -6,7 +6,8 @@ import { WeeklyReachChart, FollowersChart, BestTimeHeatmap, HookDiagnosis, Pilla
 import { getConnectedAccount } from "@/lib/instagram/account-store";
 import { getAccountSummary } from "@/lib/instagram/graph-api";
 import { PeriodFilter } from "@/components/PeriodFilter";
-import { PostCards, type PostCardRow } from "@/components/PostCards";
+import type { PostCardRow } from "@/components/PostCards";
+import { PostsView } from "@/components/PostsView";
 import { SyncButton } from "@/components/SyncButton";
 import { AnalysisPanel } from "@/components/AnalysisPanel";
 
@@ -302,7 +303,7 @@ export default async function AnalyticsPage({
             </p>
           </div>
         ) : (
-          <PostCards rows={rows} />
+          <PostsView rows={rows} />
         )}
       </div>
     </main>

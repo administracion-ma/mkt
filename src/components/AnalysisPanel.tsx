@@ -81,7 +81,7 @@ export function AnalysisPanel({
       </div>
       {error && <p style={{ fontSize: "0.78rem", color: "var(--danger)", marginTop: "0.6rem" }}>{error}</p>}
       {summary && (
-        <div style={{ whiteSpace: "pre-wrap", fontSize: "0.85rem", lineHeight: 1.65, color: "var(--text-secondary)", marginTop: "1rem" }}>
+        <div className="prose" style={{ whiteSpace: "pre-wrap", fontSize: "0.85rem", lineHeight: 1.65, color: "var(--text-secondary)", marginTop: "1rem" }}>
           {summary}
         </div>
       )}
@@ -95,7 +95,7 @@ export function AnalysisPanel({
         </p>
 
         {history.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", marginBottom: "1rem" }}>
+          <div className="prose" style={{ display: "flex", flexDirection: "column", gap: "0.9rem", marginBottom: "1rem" }}>
             {history.map((qa, i) => (
               <div key={i}>
                 <p style={{ margin: "0 0 0.3rem", fontSize: "0.82rem", fontWeight: 600, color: "var(--text)" }}>

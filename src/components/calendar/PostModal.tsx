@@ -64,9 +64,9 @@ export function PostDetailModal({
       <div style={{ display: "flex", gap: "1rem" }}>
         <div style={{ width: 100, minWidth: 100, height: 136, borderRadius: 10, overflow: "hidden", background: "#111" }}>
           {isVideo ? (
-            <video src={post.mediaUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} muted playsInline preload="metadata" />
+            <video src={`/api/media/${post.id}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} muted playsInline preload="metadata" />
           ) : (
-            <img src={post.mediaUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <img src={`/api/media/${post.id}`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
