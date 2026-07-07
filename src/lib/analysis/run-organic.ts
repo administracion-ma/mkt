@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/db/client";
-import { analysisReports } from "@/db/schema";
+import { analysisReports, actionItems } from "@/db/schema";
 import { env } from "@/lib/env";
 import { buildAnalysisPayload } from "@/lib/analysis-payload";
 import { getBrandProfile } from "@/lib/brand/actions";
+import { extractActionTexts } from "@/lib/action-items/extract";
 
 // Extraído de /api/analyze para poder correrlo tanto desde el botón "Analizar"
 // como desde el cron semanal (scripts/weekly-report.ts) sin duplicar la lógica.
@@ -76,6 +77,13 @@ export async function runOrganicAnalysis(from: Date, to: Date): Promise<Analysis
       .insert(analysisReports)
       .values({ periodFrom: from, periodTo: to, summary, modelUsed: ORGANIC_MODEL })
       .returning();
+
+    const actions = extractActionTexts(summary);
+    if (actions.length > 0) {
+      await db.insert(actionItems).values(
+        actions.map((text) => ({ source: "organic", text, periodFrom: from, periodTo: to }))
+      );
+    }
 
     return { ok: true, id: report.id, summary, createdAt: report.createdAt };
   } catch (err) {

@@ -215,4 +215,17 @@ export async function applyMigration(): Promise<void> {
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS action_items (
+      id serial PRIMARY KEY,
+      source text NOT NULL,
+      text text NOT NULL,
+      status text NOT NULL DEFAULT 'open',
+      period_from timestamptz NOT NULL,
+      period_to timestamptz NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      resolved_at timestamptz
+    );
+  `);
 }

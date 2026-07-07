@@ -239,3 +239,18 @@ export const adAnalysisReports = pgTable("ad_analysis_reports", {
   modelUsed: text("model_used").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Las "🎯 ACCIONES PARA LA SEMANA" de cada informe (orgánico y ads) se
+// extraen a filas propias en vez de quedar enterradas en el texto — así se
+// pueden marcar como hechas/descartadas y se ven en un solo lugar (home)
+// en vez de tener que abrir cada informe en Resúmenes para acordarse.
+export const actionItems = pgTable("action_items", {
+  id: serial("id").primaryKey(),
+  source: text("source").notNull(), // "organic" | "ads"
+  text: text("text").notNull(),
+  status: text("status").notNull().default("open"), // "open" | "done" | "dismissed"
+  periodFrom: timestamp("period_from", { withTimezone: true }).notNull(),
+  periodTo: timestamp("period_to", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+});

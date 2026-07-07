@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/db/client";
-import { adAnalysisReports } from "@/db/schema";
+import { adAnalysisReports, actionItems } from "@/db/schema";
 import { env } from "@/lib/env";
 import { buildAdsAnalysisPayload } from "@/lib/ads-analysis-payload";
 import { getBrandProfile } from "@/lib/brand/actions";
+import { extractActionTexts } from "@/lib/action-items/extract";
 import type { AnalysisResult } from "@/lib/analysis/run-organic";
 
 // Extraído de /api/analyze-ads para poder correrlo tanto desde el botón
@@ -73,6 +74,13 @@ export async function runAdsAnalysis(from: Date, to: Date): Promise<AnalysisResu
       .insert(adAnalysisReports)
       .values({ periodFrom: from, periodTo: to, summary, modelUsed: ADS_MODEL })
       .returning();
+
+    const actions = extractActionTexts(summary);
+    if (actions.length > 0) {
+      await db.insert(actionItems).values(
+        actions.map((text) => ({ source: "ads", text, periodFrom: from, periodTo: to }))
+      );
+    }
 
     return { ok: true, id: report.id, summary, createdAt: report.createdAt };
   } catch (err) {
