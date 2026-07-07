@@ -42,7 +42,7 @@ export default async function AdminPage() {
       {adAccount && (
         <ActionCard
           title="Sincronizar Meta Ads ahora"
-          description="Trae campañas y métricas de los últimos 14 días. Corre automáticamente 1 vez por día, usá este botón si necesitás datos más frescos ya mismo."
+          description="Trae campañas y métricas de los últimos 90 días. Corre automáticamente 1 vez por día, usá este botón si necesitás datos más frescos ya mismo."
           buttonLabel="Sincronizar pauta"
           action={runAdsSync}
         />
