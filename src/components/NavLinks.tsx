@@ -7,6 +7,7 @@ const links = [
   { href: "/calendar", label: "Calendario" },
   { href: "/analytics", label: "Analítica" },
   { href: "/ads", label: "Meta Ads" },
+  { href: "/youtube", label: "YouTube" },
   { href: "/resumenes", label: "Resúmenes" },
   { href: "/settings", label: "Ficha de marca" },
 ];

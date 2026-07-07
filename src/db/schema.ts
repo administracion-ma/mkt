@@ -40,6 +40,8 @@ export const channelEnum = pgEnum("channel", [
 
 export const formatEnum = pgEnum("format", ["VERTICAL", "HORIZONTAL"]);
 
+export const youtubePrivacyEnum = pgEnum("youtube_privacy", ["public", "unlisted", "private"]);
+
 export const igAccounts = pgTable("ig_accounts", {
   id: serial("id").primaryKey(),
   igUserId: text("ig_user_id").notNull(),
@@ -253,4 +255,58 @@ export const actionItems = pgTable("action_items", {
   periodTo: timestamp("period_to", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+});
+
+// YouTube (Data API v3 + Analytics API) — OAuth2 de Google, no Meta. El access
+// token dura ~1h (a diferencia del token de 60 días de Meta), así que se
+// refresca solo en cada uso (ver youtube/account-store.ts) en vez de por cron.
+export const youtubeAccounts = pgTable("youtube_accounts", {
+  id: serial("id").primaryKey(),
+  channelId: text("channel_id").notNull(),
+  channelTitle: text("channel_title").notNull(),
+  accessTokenEnc: text("access_token_enc").notNull(),
+  refreshTokenEnc: text("refresh_token_enc").notNull(),
+  tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const youtubeVideos = pgTable("youtube_videos", {
+  id: serial("id").primaryKey(),
+  pillarId: integer("pillar_id").references(() => pillars.id),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  videoFileUrl: text("video_file_url").notNull(),
+  privacyStatus: youtubePrivacyEnum("privacy_status").notNull().default("public"),
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+  status: postStatusEnum("status").notNull().default("DRAFT"), // reusa el mismo enum que posts (IG)
+  youtubeVideoId: text("youtube_video_id"),
+  youtubeUrl: text("youtube_url"),
+  publishError: text("publish_error"),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Snapshot por video — igual que post_metrics, viene de YouTube Analytics API
+// (views/likes/comments/retención), no de Data API (que solo da lo público).
+export const youtubeVideoMetrics = pgTable("youtube_video_metrics", {
+  id: serial("id").primaryKey(),
+  videoId: integer("video_id").notNull().references(() => youtubeVideos.id),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  views: integer("views"),
+  likes: integer("likes"),
+  comments: integer("comments"),
+  shares: integer("shares"),
+  averageViewDurationSec: integer("average_view_duration_sec"),
+  averageViewPercentage: doublePrecision("average_view_percentage"),
+  subscribersGained: integer("subscribers_gained"),
+});
+
+// Snapshot diario del canal (suscriptores) — igual que account_metrics de IG.
+export const youtubeChannelMetrics = pgTable("youtube_channel_metrics", {
+  id: serial("id").primaryKey(),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  subscriberCount: integer("subscriber_count"),
+  viewCount: integer("view_count"),
 });

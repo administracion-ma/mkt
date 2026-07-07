@@ -228,4 +228,69 @@ export async function applyMigration(): Promise<void> {
       resolved_at timestamptz
     );
   `);
+
+  await db.execute(sql`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'youtube_privacy') THEN
+        CREATE TYPE youtube_privacy AS ENUM ('public', 'unlisted', 'private');
+      END IF;
+    END$$;
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS youtube_accounts (
+      id serial PRIMARY KEY,
+      channel_id text NOT NULL,
+      channel_title text NOT NULL,
+      access_token_enc text NOT NULL,
+      refresh_token_enc text NOT NULL,
+      token_expires_at timestamptz NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS youtube_videos (
+      id serial PRIMARY KEY,
+      pillar_id integer REFERENCES pillars(id),
+      title text NOT NULL,
+      description text NOT NULL DEFAULT '',
+      video_file_url text NOT NULL,
+      privacy_status youtube_privacy NOT NULL DEFAULT 'public',
+      scheduled_at timestamptz NOT NULL,
+      status post_status NOT NULL DEFAULT 'DRAFT',
+      youtube_video_id text,
+      youtube_url text,
+      publish_error text,
+      published_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS youtube_video_metrics (
+      id serial PRIMARY KEY,
+      video_id integer NOT NULL REFERENCES youtube_videos(id),
+      captured_at timestamptz NOT NULL DEFAULT now(),
+      views integer,
+      likes integer,
+      comments integer,
+      shares integer,
+      average_view_duration_sec integer,
+      average_view_percentage double precision,
+      subscribers_gained integer
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS youtube_channel_metrics (
+      id serial PRIMARY KEY,
+      captured_at timestamptz NOT NULL DEFAULT now(),
+      subscriber_count integer,
+      view_count integer
+    );
+  `);
 }

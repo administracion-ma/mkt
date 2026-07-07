@@ -37,6 +37,15 @@ export const env = {
   get appPassword() {
     return required("APP_PASSWORD");
   },
+  get youtubeClientId() {
+    return required("YOUTUBE_CLIENT_ID");
+  },
+  get youtubeClientSecret() {
+    return required("YOUTUBE_CLIENT_SECRET");
+  },
+  get youtubeRedirectUri() {
+    return required("YOUTUBE_REDIRECT_URI");
+  },
   get resendApiKey() {
     return process.env.RESEND_API_KEY || null;
   },

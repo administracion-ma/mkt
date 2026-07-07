@@ -1,13 +1,18 @@
 import { runMigration, runClassification, runFixGraphics } from "@/lib/admin/actions";
 import { runAdsSync } from "@/lib/ads/actions";
 import { getConnectedAdAccount } from "@/lib/ads/account-store";
+import { runYoutubeSync } from "@/lib/youtube/actions";
+import { getConnectedYoutubeAccount } from "@/lib/youtube/account-store";
 import { ActionCard } from "@/components/admin/ActionCard";
 import { ConnectAdAccountForm } from "@/components/ConnectAdAccountForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const adAccount = await getConnectedAdAccount().catch(() => null);
+  const [adAccount, youtubeAccount] = await Promise.all([
+    getConnectedAdAccount().catch(() => null),
+    getConnectedYoutubeAccount().catch(() => null),
+  ]);
 
   return (
     <main className="page">
@@ -45,6 +50,25 @@ export default async function AdminPage() {
           description="Trae campañas y métricas de los últimos 90 días. Corre automáticamente 1 vez por día, usá este botón si necesitás datos más frescos ya mismo."
           buttonLabel="Sincronizar pauta"
           action={runAdsSync}
+        />
+      )}
+
+      <div className="card" style={{ marginBottom: "1.25rem" }}>
+        <h3 style={{ fontSize: "0.95rem", fontWeight: 600, margin: "0 0 0.3rem" }}>Conectar YouTube</h3>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "0 0 1rem" }}>
+          {youtubeAccount
+            ? `Canal conectado: ${youtubeAccount.channelTitle}. Volvé a conectar para cambiarlo.`
+            : "Conectá el canal de YouTube de Coinbox con tu cuenta de Google para programar videos y ver sus métricas."}
+        </p>
+        <a href="/api/auth/youtube/start" className="btn btn-primary">Conectar con YouTube</a>
+      </div>
+
+      {youtubeAccount && (
+        <ActionCard
+          title="Sincronizar YouTube ahora"
+          description="Trae vistas, likes y comentarios de los videos publicados, y el conteo de suscriptores del canal. Corre automáticamente 1 vez por día, usá este botón si necesitás datos más frescos ya mismo."
+          buttonLabel="Sincronizar YouTube"
+          action={runYoutubeSync}
         />
       )}
     </main>
