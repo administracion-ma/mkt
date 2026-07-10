@@ -8,7 +8,7 @@ const FX_BASE = "https://open.er-api.com/v6/latest/USD";
 export async function getUsdRate(currencyCode: string): Promise<number | null> {
   if (currencyCode === "USD") return 1;
   try {
-    const res = await fetch(FX_BASE, { next: { revalidate: 6 * 60 * 60 } });
+    const res = await fetch(FX_BASE, { next: { revalidate: 6 * 60 * 60 }, signal: AbortSignal.timeout(5000) });
     if (!res.ok) return null;
     const body = await res.json();
     const rate = body?.rates?.[currencyCode];

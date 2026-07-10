@@ -7,7 +7,10 @@ async function adsGet<T>(path: string, params: Record<string, string>, revalidat
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
-  const res = await fetch(url.toString(), revalidateSeconds != null ? { next: { revalidate: revalidateSeconds } } : undefined);
+  const res = await fetch(url.toString(), {
+    ...(revalidateSeconds != null ? { next: { revalidate: revalidateSeconds } } : undefined),
+    signal: AbortSignal.timeout(10000),
+  });
   const body = await res.json();
   if (!res.ok) {
     throw new Error(`Meta Ads API error en ${path}: ${JSON.stringify(body)}`);
@@ -31,7 +34,7 @@ async function adsGetAllPages<TRow>(path: string, params: Record<string, string>
   const rows: TRow[] = [];
   let nextUrl: string | undefined = url.toString();
   while (nextUrl) {
-    const res: Response = await fetch(nextUrl);
+    const res: Response = await fetch(nextUrl, { signal: AbortSignal.timeout(10000) });
     const body: PagedResponse<TRow> = await res.json();
     if (!res.ok) {
       throw new Error(`Meta Ads API error en ${path}: ${JSON.stringify(body)}`);

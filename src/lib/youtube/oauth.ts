@@ -35,7 +35,7 @@ export async function exchangeCodeForTokens(
   form.set("code", code);
   form.set("grant_type", "authorization_code");
 
-  const res = await fetch(TOKEN_URL, { method: "POST", body: form });
+  const res = await fetch(TOKEN_URL, { method: "POST", body: form, signal: AbortSignal.timeout(10000) });
   const body = await res.json();
   if (!res.ok) {
     throw new Error(`Error al intercambiar el code: ${JSON.stringify(body)}`);
@@ -57,7 +57,7 @@ export async function refreshAccessToken(
   form.set("refresh_token", refreshToken);
   form.set("grant_type", "refresh_token");
 
-  const res = await fetch(TOKEN_URL, { method: "POST", body: form });
+  const res = await fetch(TOKEN_URL, { method: "POST", body: form, signal: AbortSignal.timeout(10000) });
   const body = await res.json();
   if (!res.ok) {
     throw new Error(`Error al refrescar el token: ${JSON.stringify(body)}`);
@@ -70,7 +70,7 @@ export async function getOwnChannel(accessToken: string): Promise<{ id: string; 
   url.searchParams.set("part", "snippet");
   url.searchParams.set("mine", "true");
 
-  const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+  const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(10000) });
   const body = await res.json();
   if (!res.ok) {
     throw new Error(`Error al obtener el canal de YouTube: ${JSON.stringify(body)}`);
