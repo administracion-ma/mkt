@@ -9,7 +9,11 @@ declare global {
 
 function getClient() {
   if (!global.__dbClient) {
-    global.__dbClient = postgres(env.databaseUrl, { prepare: false });
+    // max:1 — cada función serverless de Vercel abre su propia instancia de
+    // este cliente; sin este límite, cada una podía abrir hasta 10 conexiones
+    // y agotar el límite de Supabase apenas hay uso concurrente (2+ personas
+    // a la vez), tumbando la app entera.
+    global.__dbClient = postgres(env.databaseUrl, { prepare: false, max: 1 });
   }
   return global.__dbClient;
 }

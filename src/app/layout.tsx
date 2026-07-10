@@ -13,7 +13,9 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const account = await getConnectedAccount();
+  // No usar catch acá tumba TODA la app (este layout envuelve cada página) si
+  // la consulta falla por algo transitorio (ej: pico de conexiones a la DB).
+  const account = await getConnectedAccount().catch(() => null);
 
   return (
     <html lang="es" className={geistSans.variable}>
