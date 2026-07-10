@@ -12,6 +12,12 @@ export const metadata: Metadata = {
   description: "Calendario y analítica de contenido Instagram para CoinBox Mining",
 };
 
+// Sin esto, cualquier página usa el límite default de la cuenta de Vercel
+// (puede ser muy corto) — con varias consultas a la DB + APIs externas por
+// página, era fácil pasarse y que Vercel matara la función a la mitad
+// (504 GATEWAY_TIMEOUT / FUNCTION_INVOCATION_TIMEOUT).
+export const maxDuration = 30;
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // No usar catch acá tumba TODA la app (este layout envuelve cada página) si
   // la consulta falla por algo transitorio (ej: pico de conexiones a la DB).
