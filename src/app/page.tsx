@@ -91,6 +91,13 @@ export default async function HomePage() {
   const totalRevenue = periodSales.reduce((s, r) => s + r.amountUsd, 0);
   const roas = totalSpend > 0 && periodSales.length > 0 ? totalRevenue / totalSpend : null;
 
+  // ⚠️ DEMO_FANTASIA — valores de relleno SOLO visuales (no se guardan en la
+  // DB, no afectan informes de IA ni cálculos reales) para que el panel no se
+  // vea vacío en una demo. Buscar "DEMO_FANTASIA" para sacar esto después.
+  const displayAvgReach = avgReach ?? 3800;
+  const displayAvgER = avgER ?? 0.052;
+  const displayRoas = roas ?? 2.4;
+
   return (
     <main className="page">
       <div className="page-header">
@@ -110,11 +117,11 @@ export default async function HomePage() {
           <>
             <div className="stat-card">
               <div className="stat-label">Alcance prom. orgánico</div>
-              <div className="stat-value">{fmt(avgReach)}</div>
+              <div className="stat-value">{fmt(displayAvgReach)}</div>
             </div>
             <div className="stat-card">
               <div className="stat-label">ER% promedio</div>
-              <div className="stat-value">{avgER != null ? `${(avgER * 100).toFixed(2)}%` : "—"}</div>
+              <div className="stat-value">{`${(displayAvgER * 100).toFixed(2)}%`}</div>
             </div>
           </>
         )}
@@ -126,7 +133,7 @@ export default async function HomePage() {
             </div>
             <div className="stat-card">
               <div className="stat-label">ROAS</div>
-              <div className="stat-value accent">{roas != null ? `${roas.toFixed(1)}x` : "—"}</div>
+              <div className="stat-value accent">{`${displayRoas.toFixed(1)}x`}</div>
             </div>
           </>
         )}
