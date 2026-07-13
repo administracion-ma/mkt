@@ -2,6 +2,7 @@ import { db } from "@/db/client";
 import { getConnectedYoutubeAccount } from "@/lib/youtube/account-store";
 import { YoutubeVideoForm } from "@/components/YoutubeVideoForm";
 import { YoutubeVideoList, type YoutubeVideoRow } from "@/components/YoutubeVideoList";
+import { YoutubeVideoGrid, type YoutubeGridRow } from "@/components/YoutubeVideoGrid";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,30 @@ export default async function YoutubePage() {
   const publishedCount = rows.filter((r) => r.status === "PUBLISHED").length;
   const scheduledCount = rows.filter((r) => r.status === "SCHEDULED").length;
 
+  // Publicados → grilla con portada y semáforo; el resto (programados,
+  // borradores, fallidos) sigue en la tabla de gestión de abajo.
+  const gridRows: YoutubeGridRow[] = videos
+    .filter((v) => v.status === "PUBLISHED" && v.youtubeVideoId)
+    .sort((a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0))
+    .map((v) => {
+      const m = latestMetrics.get(v.id);
+      return {
+        id: v.id,
+        youtubeVideoId: v.youtubeVideoId!,
+        title: v.title,
+        publishedAt: v.publishedAt ? v.publishedAt.toISOString() : null,
+        youtubeUrl: v.youtubeUrl,
+        pillarLabel: v.pillarId ? pillarById.get(v.pillarId) ?? null : null,
+        views: m?.views ?? null,
+        likes: m?.likes ?? null,
+        comments: m?.comments ?? null,
+        averageViewPercentage: m?.averageViewPercentage ?? null,
+        subscribersGained: m?.subscribersGained ?? null,
+      };
+    });
+
+  const pendingRows = rows.filter((r) => r.status !== "PUBLISHED");
+
   return (
     <main className="page">
       <div className="page-header">
@@ -96,12 +121,21 @@ export default async function YoutubePage() {
         <YoutubeVideoForm pillars={pillars.map((p) => ({ id: p.id, label: p.label }))} />
       </div>
 
-      <div className="card">
-        <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "1.25rem", color: "var(--text-secondary)" }}>
-          {rows.length} video{rows.length !== 1 ? "s" : ""}
+      <div className="card" style={{ marginBottom: "1.5rem" }}>
+        <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--text-secondary)" }}>
+          {gridRows.length} video{gridRows.length !== 1 ? "s" : ""} publicado{gridRows.length !== 1 ? "s" : ""}
         </h2>
-        <YoutubeVideoList videos={rows} />
+        <YoutubeVideoGrid rows={gridRows} />
       </div>
+
+      {pendingRows.length > 0 && (
+        <div className="card">
+          <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "1.25rem", color: "var(--text-secondary)" }}>
+            {pendingRows.length} pendiente{pendingRows.length !== 1 ? "s" : ""} (programados / borradores / con error)
+          </h2>
+          <YoutubeVideoList videos={pendingRows} />
+        </div>
+      )}
     </main>
   );
 }
