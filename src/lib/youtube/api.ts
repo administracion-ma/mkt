@@ -112,6 +112,60 @@ export async function getVideoAnalytics(
   return { views, likes, comments, shares, averageViewDurationSec, averageViewPercentage, subscribersGained };
 }
 
+export type UploadedVideo = {
+  videoId: string;
+  title: string;
+  description: string;
+  publishedAt: string; // ISO
+};
+
+// Lista todos los videos ya subidos al canal (para importar el historial,
+// mismo espíritu que import-instagram-history). Usa la playlist "uploads"
+// del canal, que YouTube mantiene automáticamente con todos los videos.
+export async function listUploadedVideos(accessToken: string, channelId: string): Promise<UploadedVideo[]> {
+  const chUrl = new URL(`${DATA_API}/channels`);
+  chUrl.searchParams.set("part", "contentDetails");
+  chUrl.searchParams.set("id", channelId);
+
+  const chRes = await fetch(chUrl.toString(), { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(10000) });
+  const chBody = await chRes.json();
+  if (!chRes.ok) {
+    throw new Error(`Error al obtener la playlist de subidas: ${JSON.stringify(chBody)}`);
+  }
+  const uploadsPlaylistId = chBody.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+  if (!uploadsPlaylistId) return [];
+
+  const out: UploadedVideo[] = [];
+  let pageToken: string | undefined;
+  do {
+    const plUrl = new URL(`${DATA_API}/playlistItems`);
+    plUrl.searchParams.set("part", "snippet");
+    plUrl.searchParams.set("playlistId", uploadsPlaylistId);
+    plUrl.searchParams.set("maxResults", "50");
+    if (pageToken) plUrl.searchParams.set("pageToken", pageToken);
+
+    const res = await fetch(plUrl.toString(), { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(10000) });
+    const body = await res.json();
+    if (!res.ok) {
+      throw new Error(`Error al listar videos del canal: ${JSON.stringify(body)}`);
+    }
+    for (const item of body.items ?? []) {
+      const sn = item.snippet;
+      const videoId = sn?.resourceId?.videoId;
+      if (!videoId) continue;
+      out.push({
+        videoId,
+        title: sn.title ?? "(sin título)",
+        description: sn.description ?? "",
+        publishedAt: sn.publishedAt,
+      });
+    }
+    pageToken = body.nextPageToken;
+  } while (pageToken);
+
+  return out;
+}
+
 export async function getChannelSummary(
   accessToken: string,
   channelId: string

@@ -7,6 +7,7 @@ import { youtubeVideos } from "@/db/schema";
 import { getConnectedYoutubeAccount } from "@/lib/youtube/account-store";
 import { publishYoutubeVideo } from "@/lib/youtube/publish";
 import { syncVideoInsights, snapshotChannel } from "@/lib/youtube/sync";
+import { listUploadedVideos } from "@/lib/youtube/api";
 
 // El archivo ya está subido a Blob del lado del cliente (ver YoutubeVideoForm)
 // antes de llamar a esta action — acá solo llega la URL, nunca el binario,
@@ -73,6 +74,49 @@ export async function deleteYoutubeVideo(formData: FormData) {
 
   await db.delete(youtubeVideos).where(eq(youtubeVideos.id, id));
   revalidatePath("/youtube");
+}
+
+// Botón "Importar videos existentes" en /admin — trae el historial del canal
+// (videos subidos directo a YouTube, no desde la app) para que tengan
+// métricas acá también. Mismo espíritu que import-instagram-history.
+export async function runYoutubeImport(): Promise<{ ok: boolean; message: string }> {
+  try {
+    const account = await getConnectedYoutubeAccount();
+    if (!account) return { ok: false, message: "No hay ningún canal de YouTube conectado todavía." };
+
+    const uploaded = await listUploadedVideos(account.accessToken, account.channelId);
+    if (uploaded.length === 0) return { ok: true, message: "El canal no tiene videos subidos." };
+
+    const existing = await db.query.youtubeVideos.findMany({ columns: { youtubeVideoId: true } });
+    const known = new Set(existing.map((v) => v.youtubeVideoId).filter(Boolean));
+
+    let imported = 0;
+    for (const v of uploaded) {
+      if (known.has(v.videoId)) continue;
+      const publishedAt = new Date(v.publishedAt);
+      await db.insert(youtubeVideos).values({
+        title: v.title,
+        description: v.description,
+        // Importado: el archivo original no está en Blob, ya vive en YouTube.
+        videoFileUrl: `https://www.youtube.com/watch?v=${v.videoId}`,
+        privacyStatus: "public",
+        scheduledAt: publishedAt,
+        status: "PUBLISHED",
+        youtubeVideoId: v.videoId,
+        youtubeUrl: `https://www.youtube.com/watch?v=${v.videoId}`,
+        publishedAt,
+      });
+      imported++;
+    }
+
+    revalidatePath("/youtube");
+    return {
+      ok: true,
+      message: `${imported} video(s) importados (${uploaded.length - imported} ya existían). Ahora tocá "Sincronizar YouTube" para traer sus métricas.`,
+    };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Error desconocido" };
+  }
 }
 
 // Botón "Sincronizar YouTube ahora" en /admin — mismo patrón que runAdsSync.

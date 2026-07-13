@@ -1,7 +1,7 @@
 import { runMigration, runClassification, runFixGraphics } from "@/lib/admin/actions";
 import { runAdsSync } from "@/lib/ads/actions";
 import { getConnectedAdAccount } from "@/lib/ads/account-store";
-import { runYoutubeSync } from "@/lib/youtube/actions";
+import { runYoutubeSync, runYoutubeImport } from "@/lib/youtube/actions";
 import { getConnectedYoutubeAccount } from "@/lib/youtube/account-store";
 import { ActionCard } from "@/components/admin/ActionCard";
 import { ConnectAdAccountForm } from "@/components/ConnectAdAccountForm";
@@ -64,12 +64,20 @@ export default async function AdminPage() {
       </div>
 
       {youtubeAccount && (
-        <ActionCard
-          title="Sincronizar YouTube ahora"
-          description="Trae vistas, likes y comentarios de los videos publicados, y el conteo de suscriptores del canal. Corre automáticamente 1 vez por día, usá este botón si necesitás datos más frescos ya mismo."
-          buttonLabel="Sincronizar YouTube"
-          action={runYoutubeSync}
-        />
+        <>
+          <ActionCard
+            title="Importar videos existentes de YouTube"
+            description="Trae el historial de videos que ya están subidos al canal (aunque no se hayan publicado desde esta app) para poder ver sus métricas acá. Correr una vez después de conectar; es seguro repetirlo, no duplica."
+            buttonLabel="Importar videos"
+            action={runYoutubeImport}
+          />
+          <ActionCard
+            title="Sincronizar YouTube ahora"
+            description="Trae vistas, likes y comentarios de los videos publicados, y el conteo de suscriptores del canal. Corre automáticamente 1 vez por día, usá este botón si necesitás datos más frescos ya mismo."
+            buttonLabel="Sincronizar YouTube"
+            action={runYoutubeSync}
+          />
+        </>
       )}
     </main>
   );
