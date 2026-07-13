@@ -1,8 +1,5 @@
-import { eq } from "drizzle-orm";
-import { db } from "../src/db/client";
-import { youtubeVideos } from "../src/db/schema";
 import { getConnectedYoutubeAccount } from "../src/lib/youtube/account-store";
-import { syncVideoInsights, snapshotChannel } from "../src/lib/youtube/sync";
+import { syncAllYoutube } from "../src/lib/youtube/sync";
 
 async function main() {
   const account = await getConnectedYoutubeAccount();
@@ -11,31 +8,8 @@ async function main() {
     return;
   }
 
-  try {
-    await snapshotChannel(account);
-    console.log("Snapshot de canal OK.");
-  } catch (err) {
-    console.error("Snapshot de canal FALLÓ:", err instanceof Error ? err.message : err);
-  }
-
-  const published = await db.query.youtubeVideos.findMany({ where: eq(youtubeVideos.status, "PUBLISHED") });
-  if (published.length === 0) {
-    console.log("No hay videos publicados.");
-    return;
-  }
-
-  console.log(`Sincronizando métricas de ${published.length} video(s)...`);
-
-  for (const video of published) {
-    console.log(`-> Video #${video.id} (${video.youtubeVideoId})`);
-    try {
-      const ok = await syncVideoInsights(video, account);
-      console.log(ok ? "   OK" : "   Sin datos nuevos.");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Error desconocido";
-      console.error(`   FALLÓ: ${message}`);
-    }
-  }
+  const { synced, total } = await syncAllYoutube(account);
+  console.log(`Canal actualizado. ${synced} de ${total} video(s) sincronizados.`);
 }
 
 main()

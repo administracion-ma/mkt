@@ -284,6 +284,8 @@ export const youtubeVideos = pgTable("youtube_videos", {
   youtubeUrl: text("youtube_url"),
   publishError: text("publish_error"),
   publishedAt: timestamp("published_at", { withTimezone: true }),
+  durationSec: integer("duration_sec"), // de contentDetails (Data API), se completa en el sync
+  isShort: boolean("is_short"), // null = todavía no se chequeó; separa Shorts de videos largos
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

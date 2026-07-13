@@ -80,9 +80,14 @@ export default async function YoutubePage() {
         publishedAt: v.publishedAt ? v.publishedAt.toISOString() : null,
         youtubeUrl: v.youtubeUrl,
         pillarLabel: v.pillarId ? pillarById.get(v.pillarId) ?? null : null,
+        // Si el chequeo de Short todavía no corrió (null), la duración corta
+        // (≤3min, límite actual de Shorts) es un buen proxy hasta el próximo sync.
+        isShort: v.isShort ?? (v.durationSec != null ? v.durationSec <= 180 : false),
+        durationSec: v.durationSec,
         views: m?.views ?? null,
         likes: m?.likes ?? null,
         comments: m?.comments ?? null,
+        averageViewDurationSec: m?.averageViewDurationSec ?? null,
         averageViewPercentage: m?.averageViewPercentage ?? null,
         subscribersGained: m?.subscribersGained ?? null,
       };

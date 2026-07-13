@@ -6,7 +6,7 @@ import { db } from "@/db/client";
 import { youtubeVideos } from "@/db/schema";
 import { getConnectedYoutubeAccount } from "@/lib/youtube/account-store";
 import { publishYoutubeVideo } from "@/lib/youtube/publish";
-import { syncVideoInsights, snapshotChannel } from "@/lib/youtube/sync";
+import { syncAllYoutube } from "@/lib/youtube/sync";
 import { listUploadedVideos } from "@/lib/youtube/api";
 
 // El archivo ya está subido a Blob del lado del cliente (ver YoutubeVideoForm)
@@ -125,16 +125,10 @@ export async function runYoutubeSync(): Promise<{ ok: boolean; message: string }
     const account = await getConnectedYoutubeAccount();
     if (!account) return { ok: false, message: "No hay ningún canal de YouTube conectado todavía." };
 
-    const published = await db.query.youtubeVideos.findMany({ where: eq(youtubeVideos.status, "PUBLISHED") });
-    let synced = 0;
-    for (const video of published) {
-      const ok = await syncVideoInsights(video, account).catch(() => false);
-      if (ok) synced++;
-    }
-    await snapshotChannel(account);
+    const { synced, total } = await syncAllYoutube(account);
 
     revalidatePath("/youtube");
-    return { ok: true, message: `${synced} de ${published.length} video(s) sincronizados. Canal actualizado.` };
+    return { ok: true, message: `${synced} de ${total} video(s) sincronizados. Canal actualizado.` };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Error desconocido" };
   }

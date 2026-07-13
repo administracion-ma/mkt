@@ -1,14 +1,16 @@
 import { and, eq, gte, lt } from "drizzle-orm";
 import { db } from "@/db/client";
 import { youtubeVideos, youtubeVideoMetrics, youtubeChannelMetrics } from "@/db/schema";
-import { getVideoAnalytics, getChannelSummary } from "@/lib/youtube/api";
+import { getVideoAnalytics, getChannelSummary, getVideosPublicInfo, checkIsShort, type VideoPublicInfo } from "@/lib/youtube/api";
 
 type YoutubeVideo = typeof youtubeVideos.$inferSelect;
 type Account = { channelId: string; accessToken: string };
 
 // Sincroniza las métricas de un video publicado — un snapshot por día, igual
-// que instagram/sync.ts::syncPostInsights.
-export async function syncVideoInsights(video: YoutubeVideo, account: Account): Promise<boolean> {
+// que instagram/sync.ts::syncPostInsights. `publicInfo` (contadores públicos,
+// casi en tiempo real) tapa el agujero de las 24-48h de retraso de la
+// Analytics API en videos recientes.
+export async function syncVideoInsights(video: YoutubeVideo, account: Account, publicInfo?: VideoPublicInfo): Promise<boolean> {
   if (!video.youtubeVideoId || !video.publishedAt) return false;
 
   const today = new Date();
@@ -19,16 +21,17 @@ export async function syncVideoInsights(video: YoutubeVideo, account: Account): 
   const startDate = video.publishedAt.toISOString().slice(0, 10);
   const endDate = today.toISOString().slice(0, 10);
 
-  const insights = await getVideoAnalytics(account.accessToken, account.channelId, video.youtubeVideoId, startDate, endDate);
+  const insights = await getVideoAnalytics(account.accessToken, account.channelId, video.youtubeVideoId, startDate, endDate)
+    .catch(() => null);
 
   const metricsData = {
-    views: insights.views ?? null,
-    likes: insights.likes ?? null,
-    comments: insights.comments ?? null,
-    shares: insights.shares ?? null,
-    averageViewDurationSec: insights.averageViewDurationSec ?? null,
-    averageViewPercentage: insights.averageViewPercentage ?? null,
-    subscribersGained: insights.subscribersGained ?? null,
+    views: insights?.views ?? publicInfo?.views ?? null,
+    likes: insights?.likes ?? publicInfo?.likes ?? null,
+    comments: insights?.comments ?? publicInfo?.comments ?? null,
+    shares: insights?.shares ?? null,
+    averageViewDurationSec: insights?.averageViewDurationSec ?? null,
+    averageViewPercentage: insights?.averageViewPercentage ?? null,
+    subscribersGained: insights?.subscribersGained ?? null,
     capturedAt: new Date(),
   };
 
@@ -51,6 +54,38 @@ export async function syncVideoInsights(video: YoutubeVideo, account: Account): 
   }
 
   return true;
+}
+
+// Corrida completa: snapshot del canal + métricas de cada video publicado.
+// Compartida entre el botón de /admin y el cron (scripts/sync-youtube.ts).
+// De paso completa duración y si es Short (una sola vez por video).
+export async function syncAllYoutube(account: Account): Promise<{ synced: number; total: number }> {
+  await snapshotChannel(account);
+
+  const published = await db.query.youtubeVideos.findMany({ where: eq(youtubeVideos.status, "PUBLISHED") });
+  const ids = published.map((v) => v.youtubeVideoId).filter((id): id is string => id != null);
+  const publicInfo = await getVideosPublicInfo(account.accessToken, ids).catch(() => new Map<string, VideoPublicInfo>());
+
+  let synced = 0;
+  for (const video of published) {
+    if (!video.youtubeVideoId) continue;
+    const info = publicInfo.get(video.youtubeVideoId);
+
+    if (info?.durationSec != null && video.durationSec == null) {
+      await db.update(youtubeVideos).set({ durationSec: info.durationSec }).where(eq(youtubeVideos.id, video.id));
+    }
+    if (video.isShort == null) {
+      const short = await checkIsShort(video.youtubeVideoId);
+      if (short != null) {
+        await db.update(youtubeVideos).set({ isShort: short }).where(eq(youtubeVideos.id, video.id));
+      }
+    }
+
+    const ok = await syncVideoInsights(video, account, info).catch(() => false);
+    if (ok) synced++;
+  }
+
+  return { synced, total: published.length };
 }
 
 // Snapshot diario del canal (suscriptores/vistas totales) — igual que

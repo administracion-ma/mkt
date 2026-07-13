@@ -166,6 +166,67 @@ export async function listUploadedVideos(accessToken: string, channelId: string)
   return out;
 }
 
+export type VideoPublicInfo = {
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  durationSec: number | null;
+};
+
+function parseIsoDuration(iso: string | undefined): number | null {
+  if (!iso) return null;
+  const m = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+  if (!m) return null;
+  return (Number(m[1] ?? 0) * 3600) + (Number(m[2] ?? 0) * 60) + Number(m[3] ?? 0);
+}
+
+// Contadores públicos (Data API) — a diferencia de la Analytics API (que
+// tiene 24-48h de retraso y deja los videos recientes sin métricas), estos
+// son casi en tiempo real. Se usan como respaldo de vistas/likes/comentarios.
+export async function getVideosPublicInfo(accessToken: string, videoIds: string[]): Promise<Map<string, VideoPublicInfo>> {
+  const out = new Map<string, VideoPublicInfo>();
+  for (let i = 0; i < videoIds.length; i += 50) {
+    const batch = videoIds.slice(i, i + 50);
+    const url = new URL(`${DATA_API}/videos`);
+    url.searchParams.set("part", "statistics,contentDetails");
+    url.searchParams.set("id", batch.join(","));
+
+    const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(10000) });
+    const body = await res.json();
+    if (!res.ok) {
+      throw new Error(`Error al obtener stats públicas de videos: ${JSON.stringify(body)}`);
+    }
+    for (const item of body.items ?? []) {
+      const st = item.statistics;
+      out.set(item.id, {
+        views: st?.viewCount != null ? Number(st.viewCount) : null,
+        likes: st?.likeCount != null ? Number(st.likeCount) : null,
+        comments: st?.commentCount != null ? Number(st.commentCount) : null,
+        durationSec: parseIsoDuration(item.contentDetails?.duration),
+      });
+    }
+  }
+  return out;
+}
+
+// La Data API no dice si un video es Short — el truco confiable es pedir
+// youtube.com/shorts/{id}: los Shorts responden 200, los videos normales
+// redirigen (3xx) a /watch.
+export async function checkIsShort(videoId: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(`https://www.youtube.com/shorts/${videoId}`, {
+      method: "HEAD",
+      redirect: "manual",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.status === 200) return true;
+    if (res.status >= 300 && res.status < 400) return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getChannelSummary(
   accessToken: string,
   channelId: string

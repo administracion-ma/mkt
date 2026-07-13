@@ -271,6 +271,12 @@ export async function applyMigration(): Promise<void> {
   `);
 
   await db.execute(sql`
+    ALTER TABLE youtube_videos
+      ADD COLUMN IF NOT EXISTS duration_sec integer,
+      ADD COLUMN IF NOT EXISTS is_short boolean;
+  `);
+
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS youtube_video_metrics (
       id serial PRIMARY KEY,
       video_id integer NOT NULL REFERENCES youtube_videos(id),
