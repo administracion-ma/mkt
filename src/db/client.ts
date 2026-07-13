@@ -14,16 +14,11 @@ function getClient() {
     // el límite de Supabase con uso concurrente (2+ personas a la vez),
     // tumbando la app entera. max:3 acota eso sin serializar por completo
     // las páginas que hacen varias consultas en paralelo (Promise.all).
-    global.__dbClient = postgres(env.databaseUrl, {
-      prepare: false,
-      max: 3,
-      idle_timeout: 20,
-      connect_timeout: 10,
-      // Sin esto, una consulta trabada esperando un lock (ej: algo que quedó
-      // pendiente de una migración anterior) se cuelga para siempre y ningún
-      // timeout de fetch la frena — es Postgres, no HTTP.
-      connection: { statement_timeout: 15000, idle_in_transaction_session_timeout: 15000 },
-    });
+    // Config mínima a propósito: los intentos de "mejorarla" (max bajo,
+    // idle_timeout agresivo, statement_timeout vía startup packet) causaron
+    // cuelgues y 504 intermitentes — el pooler de Supabase no se lleva bien
+    // con esos parámetros. Esta es la config que corrió estable en producción.
+    global.__dbClient = postgres(env.databaseUrl, { prepare: false });
   }
   return global.__dbClient;
 }
