@@ -1,6 +1,7 @@
-import { and, gte, lte } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
-import { adInsights, adCreativeInsights, sales } from "@/db/schema";
+import { adInsights, adCreativeInsights, sales, youtubeVideos } from "@/db/schema";
+import { median } from "@/lib/benchmark";
 import { getConnectedAdAccount } from "@/lib/ads/account-store";
 import {
   dailySpend, campaignSummaries, adSummaries, adBenchmark, unifiedPillarPerformance,
@@ -91,6 +92,28 @@ export default async function AdsPage({
     }).catch(() => []),
   ]);
 
+  // YouTube por pilar — para la vista unificada. .catch: hasta que se corra
+  // la migración de YouTube estas tablas pueden no existir.
+  const [ytVideos, ytMetrics] = await Promise.all([
+    db.query.youtubeVideos.findMany({ where: eq(youtubeVideos.status, "PUBLISHED") }).catch(() => []),
+    db.query.youtubeVideoMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }).catch(() => []),
+  ]);
+  const latestYt = new Map<number, (typeof ytMetrics)[0]>();
+  for (const m of ytMetrics) {
+    if (!latestYt.has(m.videoId)) latestYt.set(m.videoId, m);
+  }
+  const ytByPillar = new Map<number, number[]>();
+  for (const v of ytVideos) {
+    if (v.pillarId == null) continue;
+    const views = latestYt.get(v.id)?.views;
+    (ytByPillar.get(v.pillarId) ?? ytByPillar.set(v.pillarId, []).get(v.pillarId)!).push(views ?? 0);
+  }
+  const ytPillarStats = Array.from(ytByPillar.entries()).map(([pillarId, views]) => ({
+    pillarId,
+    videos: views.length,
+    viewsMedian: median(views.filter((v) => v > 0)),
+  }));
+
   // Todo el gasto se convierte a USD acá, en el único punto de entrada — el
   // resto de la app (gráficos, tablas, grilla) ya trabaja siempre en USD sin
   // saber de conversión. CPC/CPM se recalculan solos a partir de este spend.
@@ -120,7 +143,11 @@ export default async function AdsPage({
   const campaignStats = campaignSummaries(rows);
 
   const organicPillarStats = pillarPerformance(organicRows, allPillars);
-  const unifiedRows = unifiedPillarPerformance(organicPillarStats, campaignStats);
+  const pillarLabelById = new Map(allPillars.map((p) => [p.id, p.label]));
+  const unifiedRows = unifiedPillarPerformance(organicPillarStats, campaignStats, ytPillarStats).map((r) => ({
+    ...r,
+    label: pillarLabelById.get(r.pillarId) ?? r.label,
+  }));
 
   const adById = new Map(adList.map((a) => [a.id, a]));
   const toAdCreativeRow = (i: (typeof adInsightRows)[number]): AdCreativeRow => {

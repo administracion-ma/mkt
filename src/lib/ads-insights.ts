@@ -98,45 +98,51 @@ export type UnifiedPillarRow = {
   paidSpend: number;
   paidResults: number;
   paidCostPerResult: number | null;
+  ytVideos: number;
+  ytViewsMedian: number | null;
 };
+
+export type YoutubePillarStat = { pillarId: number; videos: number; viewsMedian: number | null };
 
 export function unifiedPillarPerformance(
   organicStats: { pillarId: number; label: string; posts: number; alcanceMediano: number | null; erMediana: number | null }[],
-  campaigns: CampaignSummary[]
+  campaigns: CampaignSummary[],
+  youtubeStats: YoutubePillarStat[] = []
 ): UnifiedPillarRow[] {
   const byPillar = new Map<number, UnifiedPillarRow>();
+  const blank = (pillarId: number, label: string): UnifiedPillarRow => ({
+    pillarId,
+    label,
+    organicPosts: 0,
+    organicReach: null,
+    organicEr: null,
+    paidSpend: 0,
+    paidResults: 0,
+    paidCostPerResult: null,
+    ytVideos: 0,
+    ytViewsMedian: null,
+  });
 
   for (const o of organicStats) {
     byPillar.set(o.pillarId, {
-      pillarId: o.pillarId,
-      label: o.label,
+      ...blank(o.pillarId, o.label),
       organicPosts: o.posts,
       organicReach: o.alcanceMediano,
       organicEr: o.erMediana,
-      paidSpend: 0,
-      paidResults: 0,
-      paidCostPerResult: null,
     });
   }
 
   for (const c of campaigns) {
     if (c.pillarId == null) continue;
-    const existing = byPillar.get(c.pillarId);
-    if (existing) {
-      existing.paidSpend += c.spend;
-      existing.paidResults += c.results;
-    } else {
-      byPillar.set(c.pillarId, {
-        pillarId: c.pillarId,
-        label: `Pilar #${c.pillarId}`,
-        organicPosts: 0,
-        organicReach: null,
-        organicEr: null,
-        paidSpend: c.spend,
-        paidResults: c.results,
-        paidCostPerResult: null,
-      });
-    }
+    const row = byPillar.get(c.pillarId) ?? byPillar.set(c.pillarId, blank(c.pillarId, `Pilar #${c.pillarId}`)).get(c.pillarId)!;
+    row.paidSpend += c.spend;
+    row.paidResults += c.results;
+  }
+
+  for (const y of youtubeStats) {
+    const row = byPillar.get(y.pillarId) ?? byPillar.set(y.pillarId, blank(y.pillarId, `Pilar #${y.pillarId}`)).get(y.pillarId)!;
+    row.ytVideos = y.videos;
+    row.ytViewsMedian = y.viewsMedian;
   }
 
   const out = Array.from(byPillar.values());
@@ -144,10 +150,10 @@ export function unifiedPillarPerformance(
     row.paidCostPerResult = row.paidResults > 0 ? row.paidSpend / row.paidResults : null;
   }
 
-  // Solo pilares con alguna señal (orgánica o paga) — no listar los 8 pilares
-  // vacíos si todavía no se taggeó ninguna campaña.
+  // Solo pilares con alguna señal (orgánica, paga o de YouTube) — no listar
+  // los 8 pilares vacíos si todavía no se taggeó nada.
   return out
-    .filter((r) => r.organicPosts > 0 || r.paidSpend > 0)
+    .filter((r) => r.organicPosts > 0 || r.paidSpend > 0 || r.ytVideos > 0)
     .sort((a, b) => b.paidSpend - a.paidSpend || (b.organicReach ?? 0) - (a.organicReach ?? 0));
 }
 

@@ -4,6 +4,8 @@ import { posts } from "@/db/schema";
 import { createPost, deletePost, publishPostNow } from "@/lib/posts/actions";
 import { CalendarGrid } from "@/components/calendar/CalendarGrid";
 import type { CalendarPost } from "@/components/calendar/types";
+import { getAnalyticsRows } from "@/lib/analytics-data";
+import { bestTimeHeatmap, DAY_LABELS, SLOT_LABELS } from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
 
@@ -23,14 +25,27 @@ export default async function CalendarPage({
   const rangeStart = new Date(year, month, -7);
   const rangeEnd = new Date(year, month + 1, 7);
 
-  const [allPillars, allEditors, monthPosts] = await Promise.all([
+  const [allPillars, allEditors, monthPosts, analyticsRows] = await Promise.all([
     db.query.pillars.findMany({ orderBy: (p, { asc }) => [asc(p.id)] }),
     db.query.editors.findMany({ orderBy: (e, { asc }) => [asc(e.id)] }),
     db.query.posts.findMany({
       where: and(gte(posts.scheduledAt, rangeStart), lt(posts.scheduledAt, rangeEnd)),
       orderBy: (p, { asc }) => [asc(p.scheduledAt)],
     }),
+    // Todo el histórico — el mejor horario sale del heatmap de Analítica,
+    // acá cerramos el loop: la data de cuándo rinde alimenta el cuándo programar.
+    getAnalyticsRows().catch(() => []),
   ]);
+
+  const heatBest = bestTimeHeatmap(analyticsRows).best;
+  const bestTime = heatBest
+    ? {
+        day: heatBest.day,
+        slot: heatBest.slot,
+        label: `${DAY_LABELS[heatBest.day]} ${SLOT_LABELS[heatBest.slot]}`,
+        medianReach: heatBest.median,
+      }
+    : null;
 
   const calendarPosts: CalendarPost[] = monthPosts.map((p) => ({
     id: p.id,
@@ -62,6 +77,7 @@ export default async function CalendarPage({
           posts={calendarPosts}
           pillars={allPillars}
           editors={allEditors}
+          bestTime={bestTime}
           createPost={createPost}
           deletePost={deletePost}
           publishPostNow={publishPostNow}

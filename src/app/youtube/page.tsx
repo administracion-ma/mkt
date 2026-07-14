@@ -90,6 +90,7 @@ export default async function YoutubePage() {
         title: v.title,
         publishedAt: v.publishedAt ? v.publishedAt.toISOString() : null,
         youtubeUrl: v.youtubeUrl,
+        pillarId: v.pillarId,
         pillarLabel: v.pillarId ? pillarById.get(v.pillarId) ?? null : null,
         // Si el chequeo de Short todavía no corrió (null), la duración corta
         // (≤3min, límite actual de Shorts) es un buen proxy hasta el próximo sync.
@@ -151,7 +152,7 @@ export default async function YoutubePage() {
         <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--text-secondary)" }}>
           {gridRows.length} video{gridRows.length !== 1 ? "s" : ""} publicado{gridRows.length !== 1 ? "s" : ""}
         </h2>
-        <YoutubeVideoGrid rows={gridRows} />
+        <YoutubeVideoGrid rows={gridRows} pillars={pillars.map((p) => ({ id: p.id, label: p.label }))} />
       </div>
 
       {pendingRows.length > 0 && (

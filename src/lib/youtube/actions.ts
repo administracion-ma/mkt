@@ -76,6 +76,14 @@ export async function deleteYoutubeVideo(formData: FormData) {
   revalidatePath("/youtube");
 }
 
+// Igual que assignCampaignPillar (ads) — para cruzar el rendimiento de
+// YouTube con el mismo pilar de contenido que IG orgánico y pauta.
+export async function assignYoutubeVideoPillar(videoId: number, pillarId: number | null): Promise<void> {
+  await db.update(youtubeVideos).set({ pillarId, updatedAt: new Date() }).where(eq(youtubeVideos.id, videoId));
+  revalidatePath("/youtube");
+  revalidatePath("/ads");
+}
+
 // Botón "Importar videos existentes" en /admin — trae el historial del canal
 // (videos subidos directo a YouTube, no desde la app) para que tengan
 // métricas acá también. Mismo espíritu que import-instagram-history.

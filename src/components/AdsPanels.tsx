@@ -183,9 +183,11 @@ export function UnifiedPillarTable({ rows }: { rows: UnifiedPillarRow[] }) {
         <thead>
           <tr>
             <th>Pilar</th>
-            <th className="num">Posts orgánicos</th>
-            <th className="num">Alcance orgánico</th>
-            <th className="num">ER orgánico</th>
+            <th className="num">Posts IG</th>
+            <th className="num">Alcance IG</th>
+            <th className="num">ER IG</th>
+            <th className="num">Videos YT</th>
+            <th className="num">Vistas YT (med.)</th>
             <th className="num">Gasto pauta</th>
             <th className="num">Resultados pauta</th>
             <th className="num">Costo/resultado</th>
@@ -198,6 +200,8 @@ export function UnifiedPillarTable({ rows }: { rows: UnifiedPillarRow[] }) {
               <td className="num">{r.organicPosts || "—"}</td>
               <td className="num">{fmt(r.organicReach)}</td>
               <td className="num">{r.organicEr != null ? `${(r.organicEr * 100).toFixed(1)}%` : "—"}</td>
+              <td className="num">{r.ytVideos || "—"}</td>
+              <td className="num">{fmt(r.ytViewsMedian)}</td>
               <td className="num" style={{ color: r.paidSpend > 0 ? "var(--accent)" : undefined }}>{r.paidSpend > 0 ? fmtMoney(r.paidSpend) : "—"}</td>
               <td className="num">{r.paidResults || "—"}</td>
               <td className="num">{fmtMoney(r.paidCostPerResult)}</td>

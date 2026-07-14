@@ -12,14 +12,17 @@ function dateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+export type BestTimeHint = { day: number; slot: number; label: string; medianReach: number | null };
+
 export function CalendarGrid({
-  year, month, posts, pillars, editors, createPost, deletePost, publishPostNow,
+  year, month, posts, pillars, editors, bestTime, createPost, deletePost, publishPostNow,
 }: {
   year: number;
   month: number; // 0-indexed
   posts: CalendarPost[];
   pillars: Pillar[];
   editors: Editor[];
+  bestTime: BestTimeHint | null;
   createPost: (formData: FormData) => Promise<void>;
   deletePost: (formData: FormData) => Promise<void>;
   publishPostNow: (formData: FormData) => Promise<void>;
@@ -176,6 +179,7 @@ export function CalendarGrid({
           defaultDate={newPostDate}
           pillars={pillars}
           editors={editors}
+          bestTime={bestTime}
           onClose={() => setNewPostDate(null)}
           createPost={createPost}
         />

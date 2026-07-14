@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
-import { adInsights, sales, actionItems } from "@/db/schema";
+import { adInsights, sales, actionItems } from "@/db/schema"; // accountMetrics/youtubeChannelMetrics van vía db.query
 import { getConnectedAccount } from "@/lib/instagram/account-store";
 import { getConnectedAdAccount } from "@/lib/ads/account-store";
 import { getAnalyticsRows } from "@/lib/analytics-data";
@@ -60,7 +60,7 @@ export default async function HomePage() {
   const from = new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
   const prevFrom = new Date(from.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const [openItems, organicRows, prevOrganicRows, adInsightRows, prevAdInsightRows, periodSales, prevSales, usdRate] = await Promise.all([
+  const [openItems, organicRows, prevOrganicRows, adInsightRows, prevAdInsightRows, periodSales, prevSales, usdRate, igSnapshots, ytSnapshots] = await Promise.all([
     db.query.actionItems.findMany({
       where: eq(actionItems.status, "open"),
       orderBy: (a, { desc }) => [desc(a.createdAt)],
@@ -80,7 +80,20 @@ export default async function HomePage() {
       ? db.query.sales.findMany({ where: and(gte(sales.occurredAt, prevFrom), lte(sales.occurredAt, from)) }).catch(() => [])
       : Promise.resolve([]),
     adAccount ? getUsdRate(adAccount.currency) : Promise.resolve(null),
+    // Comunidad cross-red: seguidores IG + suscriptores YT, con historial
+    // para el delta semanal. .catch: las tablas pueden no existir aún.
+    db.query.accountMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }).catch(() => []),
+    db.query.youtubeChannelMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }).catch(() => []),
   ]);
+
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  const nowMs = to.getTime();
+  const igFollowersNow = igSnapshots[0]?.followersCount ?? null;
+  const igFollowersPrev = igSnapshots.find((s) => nowMs - s.capturedAt.getTime() >= 5 * 24 * 60 * 60 * 1000 && nowMs - s.capturedAt.getTime() <= 3 * weekMs)?.followersCount ?? null;
+  const ytSubsNow = ytSnapshots[0]?.subscriberCount ?? null;
+  const ytSubsPrev = ytSnapshots.find((s) => nowMs - s.capturedAt.getTime() >= 5 * 24 * 60 * 60 * 1000 && nowMs - s.capturedAt.getTime() <= 3 * weekMs)?.subscriberCount ?? null;
+  const communityNow = igFollowersNow != null || ytSubsNow != null ? (igFollowersNow ?? 0) + (ytSubsNow ?? 0) : null;
+  const communityPrev = igFollowersPrev != null || ytSubsPrev != null ? (igFollowersPrev ?? 0) + (ytSubsPrev ?? 0) : null;
 
   const organicAggregates = (rows: typeof organicRows) => {
     const withMetrics = rows.filter((r) => r.reach != null && r.reach > 0);
@@ -131,6 +144,13 @@ export default async function HomePage() {
       </div>
 
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+        {communityNow != null && (
+          <div className="stat-card">
+            <div className="stat-label">Comunidad total (IG + YT)</div>
+            <div className="stat-value accent">{fmt(communityNow)}</div>
+            <StatDelta curr={communityNow} prev={communityPrev} />
+          </div>
+        )}
         {igAccount && (
           <>
             <div className="stat-card">

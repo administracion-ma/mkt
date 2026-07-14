@@ -1,4 +1,6 @@
+import { and, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db/client";
+import { youtubeVideos } from "@/db/schema";
 import { getAnalyticsRows } from "@/lib/analytics-data";
 import {
   weeklyReach,
@@ -16,6 +18,52 @@ import { getMediaComments } from "@/lib/instagram/graph-api";
 
 function pct(n: number | null): string | null {
   return n != null ? `${(n * 100).toFixed(2)}%` : null;
+}
+
+// Sección de YouTube para el mismo informe — el análisis cross-red (¿el
+// mismo contenido rinde mejor en IG o YT?) solo es posible si el modelo ve
+// ambas plataformas juntas. Devuelve null si no hay canal conectado o no
+// hay videos en el período (el informe sigue siendo solo-IG sin romperse).
+async function buildYoutubeSection(from: Date, to: Date) {
+  try {
+    const videos = await db.query.youtubeVideos.findMany({
+      where: and(eq(youtubeVideos.status, "PUBLISHED"), gte(youtubeVideos.publishedAt, from), lte(youtubeVideos.publishedAt, to)),
+    });
+    if (videos.length === 0) return null;
+
+    const metrics = await db.query.youtubeVideoMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] });
+    const latest = new Map<number, (typeof metrics)[0]>();
+    for (const m of metrics) {
+      if (!latest.has(m.videoId)) latest.set(m.videoId, m);
+    }
+    const snapshot = await db.query.youtubeChannelMetrics.findFirst({ orderBy: (m, { desc }) => [desc(m.capturedAt)] });
+
+    const items = videos.map((v) => {
+      const m = latest.get(v.id);
+      return {
+        titulo: v.title.slice(0, 80),
+        formato: v.isShort ? "short" : "video_largo",
+        vistas: m?.views ?? null,
+        likes: m?.likes ?? null,
+        comentarios: m?.comments ?? null,
+        retencion_pct: m?.averageViewPercentage ?? null,
+        suscriptores_ganados: m?.subscribersGained ?? null,
+      };
+    });
+
+    const viewsOf = (formato: string) =>
+      items.filter((i) => i.formato === formato && i.vistas != null).map((i) => i.vistas as number);
+
+    return {
+      suscriptores_canal: snapshot?.subscriberCount ?? null,
+      videos_publicados: items.length,
+      mediana_vistas_shorts: median(viewsOf("short")),
+      mediana_vistas_largos: median(viewsOf("video_largo")),
+      videos: items,
+    };
+  } catch {
+    return null; // tablas de YouTube todavía no migradas — informe solo-IG
+  }
 }
 
 // Comentarios reales de los posts destacados (top/bottom) — señal rica que
@@ -80,6 +128,7 @@ export async function buildAnalysisPayload(from: Date, to: Date) {
     .slice(0, 3);
 
   const commentsByPostId = await fetchCommentsFor([...topRows, ...bottomRows]);
+  const youtube = await buildYoutubeSection(from, to);
 
   const topPosts = topRows.map((r) => ({
     caption: r.caption?.slice(0, 100),
@@ -129,6 +178,7 @@ export async function buildAnalysisPayload(from: Date, to: Date) {
       alcance_mediano: h.alcanceMediano,
       share_mediano: pct(h.shareRateMediana),
     })),
+    youtube,
   };
 }
 

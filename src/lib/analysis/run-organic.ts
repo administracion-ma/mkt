@@ -21,6 +21,7 @@ Reglas:
 - Si te paso el informe de la semana anterior, hacé seguimiento explícito: si una acción que sugeriste se ve reflejada en los datos nuevos, decilo; si no, notalo.
 - Los posts destacados traen comentarios reales cuando hay. Son la señal más directa de qué le interesa a la audiencia — si ves un patrón (preguntas repetidas, objeciones, pedidos), usalo para la hipótesis o las acciones.
 - Tenés un ranking de pilares de contenido (ranking_pilares, sobre todo el histórico) y hashtags destacados (hashtags_destacados). Usalos para las acciones: si un pilar rinde mucho mejor que otros, sugerí postear más de eso; si un hashtag se repite entre los de mejor alcance, sugerí seguir usándolo.
+- Si el payload trae una sección "youtube" (no null), integrala al análisis: compará el rendimiento del mismo tipo de contenido entre Instagram y YouTube (¿los Shorts rinden mejor que los reels? ¿la retención acompaña?) y que al menos una acción de la semana pueda ser de YouTube si los datos lo ameritan. Si es null, ignorala — el informe es solo de Instagram.
 
 Estructura fija del informe (usá exactamente estos títulos, sin markdown, solo texto plano con emojis):
 📊 RESUMEN — 2-3 oraciones sobre el estado general del período.

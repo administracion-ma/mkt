@@ -1,4 +1,7 @@
 import { band, bm, BM_COLOR, type BmLevel, type MetricBand } from "@/lib/benchmark";
+import { YoutubePillarSelect } from "@/components/YoutubePillarSelect";
+
+export type PillarOption = { id: number; label: string };
 
 // Grilla de videos publicados con portada + semáforo de terciles — mismo
 // criterio "alto/medio/bajo" que la grilla de posts de Instagram. Shorts y
@@ -10,6 +13,7 @@ export type YoutubeGridRow = {
   title: string;
   publishedAt: string | null;
   youtubeUrl: string | null;
+  pillarId: number | null;
   pillarLabel: string | null;
   isShort: boolean;
   durationSec: number | null;
@@ -68,7 +72,7 @@ const FORMAT_STYLE = {
   long: { label: "▭ Video", color: "#60a5fa" },
 } as const;
 
-function VideoTile({ row, bands }: { row: YoutubeGridRow; bands: Bands }) {
+function VideoTile({ row, bands, pillars }: { row: YoutubeGridRow; bands: Bands; pillars: PillarOption[] }) {
   // Las miniaturas de YouTube son URLs públicas estables (no expiran como las
   // de Meta) — no hace falta proxy.
   const thumb = `https://i.ytimg.com/vi/${row.youtubeVideoId}/hqdefault.jpg`;
@@ -117,12 +121,14 @@ function VideoTile({ row, bands }: { row: YoutubeGridRow; bands: Bands }) {
             <MiniStat label="Subs +" value={`+${row.subscribersGained}`} />
           )}
         </div>
+
+        <YoutubePillarSelect videoId={row.id} pillarId={row.pillarId} pillars={pillars} />
       </div>
     </div>
   );
 }
 
-function Section({ title, note, rows }: { title: string; note?: string; rows: YoutubeGridRow[] }) {
+function Section({ title, note, rows, pillars }: { title: string; note?: string; rows: YoutubeGridRow[]; pillars: PillarOption[] }) {
   if (rows.length === 0) return null;
   const bands = buildBands(rows);
   return (
@@ -131,14 +137,14 @@ function Section({ title, note, rows }: { title: string; note?: string; rows: Yo
       {note && <p style={{ fontSize: "0.7rem", color: "var(--text-tertiary)", margin: "0 0 0.9rem" }}>{note}</p>}
       <div className="reels-grid">
         {rows.map((row) => (
-          <VideoTile key={row.id} row={row} bands={bands} />
+          <VideoTile key={row.id} row={row} bands={bands} pillars={pillars} />
         ))}
       </div>
     </div>
   );
 }
 
-export function YoutubeVideoGrid({ rows }: { rows: YoutubeGridRow[] }) {
+export function YoutubeVideoGrid({ rows, pillars }: { rows: YoutubeGridRow[]; pillars: PillarOption[] }) {
   if (rows.length === 0) {
     return (
       <div className="empty">
@@ -159,8 +165,8 @@ export function YoutubeVideoGrid({ rows }: { rows: YoutubeGridRow[] }) {
         comparan por separado; likes y comentarios como tasa sobre vistas. Retención y watch time pueden tardar 24-48h
         en aparecer para videos recientes (retraso de YouTube, no nuestro).
       </p>
-      <Section title="▯ Shorts (verticales)" rows={shorts} />
-      <Section title="▭ Videos largos (horizontales)" rows={longs} />
+      <Section title="▯ Shorts (verticales)" rows={shorts} pillars={pillars} />
+      <Section title="▭ Videos largos (horizontales)" rows={longs} pillars={pillars} />
     </>
   );
 }

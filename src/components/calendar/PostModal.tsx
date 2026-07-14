@@ -142,17 +142,35 @@ export function PostDetailModal({
 }
 
 // ── Crear post nuevo ──────────────────────────────────────────────────────────
+type BestTimeHint = { day: number; slot: number; label: string; medianReach: number | null };
+
+// Próxima fecha que cae en el día/franja del mejor horario histórico —
+// se usa la mitad de la franja (ej: 18-24h → 21:00) como hora concreta.
+function nextBestSlotDateTime(hint: BestTimeHint): string {
+  const d = new Date();
+  const targetDow = (hint.day + 1) % 7; // hint.day: 0=lunes → JS: 0=domingo
+  d.setHours(hint.slot * 6 + 3, 0, 0, 0);
+  while (d.getDay() !== targetDow || d.getTime() < Date.now()) {
+    d.setDate(d.getDate() + 1);
+    d.setHours(hint.slot * 6 + 3, 0, 0, 0);
+  }
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function NewPostModal({
-  defaultDate, pillars, editors, onClose, createPost,
+  defaultDate, pillars, editors, bestTime, onClose, createPost,
 }: {
   defaultDate: string | null;
   pillars: Pillar[];
   editors: Editor[];
+  bestTime: BestTimeHint | null;
   onClose: () => void;
   createPost: (formData: FormData) => Promise<void>;
 }) {
   const [submitting, setSubmitting] = useState<"schedule" | "now" | null>(null);
   const defaultDateTime = defaultDate ? `${defaultDate}T12:00` : "";
+  const [scheduledAt, setScheduledAt] = useState(defaultDateTime);
 
   return (
     <Overlay onClose={onClose}>
@@ -195,7 +213,27 @@ export function NewPostModal({
 
         <label>
           <span className="form-label">Fecha y hora</span>
-          <input type="datetime-local" name="scheduledAt" required defaultValue={defaultDateTime} className="form-input" />
+          <input
+            type="datetime-local"
+            name="scheduledAt"
+            required
+            value={scheduledAt}
+            onChange={(e) => setScheduledAt(e.target.value)}
+            className="form-input"
+          />
+          {bestTime && (
+            <span style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "0.4rem" }}>
+              💡 Tu mejor franja histórica: <strong style={{ color: "var(--accent)" }}>{bestTime.label}</strong>
+              <button
+                type="button"
+                onClick={() => setScheduledAt(nextBestSlotDateTime(bestTime))}
+                className="btn-ghost"
+                style={{ fontSize: "0.7rem", color: "var(--accent)", padding: "0.1rem 0.4rem" }}
+              >
+                Usar
+              </button>
+            </span>
+          )}
         </label>
 
         <div className="form-row">
