@@ -1,7 +1,7 @@
 import { and, eq, gte, lt } from "drizzle-orm";
 import { db } from "@/db/client";
 import { youtubeVideos, youtubeVideoMetrics, youtubeChannelMetrics } from "@/db/schema";
-import { getVideoAnalytics, getChannelSummary, getVideosPublicInfo, checkIsShort, type VideoPublicInfo } from "@/lib/youtube/api";
+import { getVideoAnalytics, getChannelSummary, getVideosPublicInfo, type VideoPublicInfo } from "@/lib/youtube/api";
 
 type YoutubeVideo = typeof youtubeVideos.$inferSelect;
 type Account = { channelId: string; accessToken: string };
@@ -74,11 +74,10 @@ export async function syncAllYoutube(account: Account): Promise<{ synced: number
     if (info?.durationSec != null && video.durationSec == null) {
       await db.update(youtubeVideos).set({ durationSec: info.durationSec }).where(eq(youtubeVideos.id, video.id));
     }
-    if (video.isShort == null) {
-      const short = await checkIsShort(video.youtubeVideoId);
-      if (short != null) {
-        await db.update(youtubeVideos).set({ isShort: short }).where(eq(youtubeVideos.id, video.id));
-      }
+    // Se corrige SIEMPRE que difiera (no solo si es null): la detección
+    // anterior por URL guardó valores equivocados y hay que pisarlos.
+    if (info?.isVertical != null && video.isShort !== info.isVertical) {
+      await db.update(youtubeVideos).set({ isShort: info.isVertical }).where(eq(youtubeVideos.id, video.id));
     }
 
     const ok = await syncVideoInsights(video, account, info).catch(() => false);

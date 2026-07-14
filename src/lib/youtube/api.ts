@@ -171,6 +171,7 @@ export type VideoPublicInfo = {
   likes: number | null;
   comments: number | null;
   durationSec: number | null;
+  isVertical: boolean | null; // del archivo real (fileDetails) — vertical = Short
 };
 
 function parseIsoDuration(iso: string | undefined): number | null {
@@ -188,7 +189,10 @@ export async function getVideosPublicInfo(accessToken: string, videoIds: string[
   for (let i = 0; i < videoIds.length; i += 50) {
     const batch = videoIds.slice(i, i + 50);
     const url = new URL(`${DATA_API}/videos`);
-    url.searchParams.set("part", "statistics,contentDetails");
+    // fileDetails (solo visible para el dueño del canal, que somos nosotros)
+    // trae el ancho/alto real del archivo — la forma confiable de saber si un
+    // video es vertical (Short) u horizontal, sin trucos de scraping.
+    url.searchParams.set("part", "statistics,contentDetails,fileDetails");
     url.searchParams.set("id", batch.join(","));
 
     const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(10000) });
@@ -198,33 +202,21 @@ export async function getVideosPublicInfo(accessToken: string, videoIds: string[
     }
     for (const item of body.items ?? []) {
       const st = item.statistics;
+      const stream = item.fileDetails?.videoStreams?.[0];
+      const w = stream?.widthPixels != null ? Number(stream.widthPixels) : null;
+      const h = stream?.heightPixels != null ? Number(stream.heightPixels) : null;
+      // rotation: algunos archivos se suben "acostados" con metadata de giro
+      const rotated = stream?.rotation === "clockwise" || stream?.rotation === "counterClockwise";
       out.set(item.id, {
         views: st?.viewCount != null ? Number(st.viewCount) : null,
         likes: st?.likeCount != null ? Number(st.likeCount) : null,
         comments: st?.commentCount != null ? Number(st.commentCount) : null,
         durationSec: parseIsoDuration(item.contentDetails?.duration),
+        isVertical: w != null && h != null ? (rotated ? w > h : h > w) : null,
       });
     }
   }
   return out;
-}
-
-// La Data API no dice si un video es Short — el truco confiable es pedir
-// youtube.com/shorts/{id}: los Shorts responden 200, los videos normales
-// redirigen (3xx) a /watch.
-export async function checkIsShort(videoId: string): Promise<boolean | null> {
-  try {
-    const res = await fetch(`https://www.youtube.com/shorts/${videoId}`, {
-      method: "HEAD",
-      redirect: "manual",
-      signal: AbortSignal.timeout(5000),
-    });
-    if (res.status === 200) return true;
-    if (res.status >= 300 && res.status < 400) return false;
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 export async function getChannelSummary(
