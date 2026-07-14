@@ -12,6 +12,8 @@ import { SyncButton } from "@/components/SyncButton";
 import { AnalysisPanel } from "@/components/AnalysisPanel";
 import { KeyInsights } from "@/components/KeyInsights";
 import { buildKeyInsights } from "@/lib/key-insights";
+import { StatDelta } from "@/components/StatDelta";
+import { getAnalyticsRows } from "@/lib/analytics-data";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +96,10 @@ export default async function AnalyticsPage({
   const resolvedTo = toDate ?? new Date();
   const resolvedFrom = fromDate ?? new Date(resolvedTo.getTime() - 30 * 24 * 60 * 60 * 1000);
 
+  // Ventana anterior del mismo largo, para los deltas de las stat cards.
+  const prevWindowFrom = new Date(resolvedFrom.getTime() - (resolvedTo.getTime() - resolvedFrom.getTime()));
+  const prevRows = await getAnalyticsRows(prevWindowFrom, resolvedFrom);
+
   const lastReportAny = await db.query.analysisReports
     .findFirst({ orderBy: (r, { desc }) => [desc(r.createdAt)] })
     .catch(() => null);
@@ -173,6 +179,18 @@ export default async function AnalyticsPage({
         return erR > erB ? r : best;
       })
     : null;
+
+  // Agregados del período anterior — para los deltas de las stat cards.
+  const prevWith = prevRows.filter((r) => r.reach != null && r.reach > 0);
+  const prevAvgReach = prevWith.length > 0 ? Math.round(prevWith.reduce((s, r) => s + (r.reach ?? 0), 0) / prevWith.length) : null;
+  const prevErValues = prevWith
+    .map((r) => {
+      if (!r.reach) return null;
+      return ((r.likeCount ?? 0) + (r.commentCount ?? 0) + (r.savedCount ?? 0) + (r.sharesCount ?? 0)) / r.reach;
+    })
+    .filter((v): v is number => v != null);
+  const prevAvgER = prevErValues.length > 0 ? prevErValues.reduce((s, v) => s + v, 0) / prevErValues.length : null;
+  const prevSavedShares = prevWith.reduce((s, r) => s + (r.savedCount ?? 0) + (r.sharesCount ?? 0), 0);
 
   // Última sincronización (los snapshots vienen ordenados por capturedAt desc)
   const lastSyncAt = allMetrics[0]?.capturedAt?.toISOString() ?? null;
@@ -275,24 +293,28 @@ export default async function AnalyticsPage({
         <div className="stat-card">
           <div className="stat-label">Posts en período</div>
           <div className="stat-value">{publishedPosts.length}</div>
+          <StatDelta curr={publishedPosts.length} prev={prevRows.length > 0 ? prevRows.length : null} />
         </div>
         <div className="stat-card">
           <div className="stat-label">Alcance promedio</div>
           <div className={`stat-value${avgReach ? " accent" : ""}`}>
             {fmt(avgReach)}
           </div>
+          <StatDelta curr={avgReach} prev={prevAvgReach} />
         </div>
         <div className="stat-card">
           <div className="stat-label">ER% promedio</div>
           <div className={`stat-value${avgER != null && avgER >= 0.05 ? " accent" : ""}`}>
             {avgER != null ? `${(avgER * 100).toFixed(2)}%` : "—"}
           </div>
+          <StatDelta curr={avgER} prev={prevAvgER} />
         </div>
         <div className="stat-card">
           <div className="stat-label">Guardados · Shares</div>
           <div className="stat-value">
             {hasMetrics ? `${fmt(totalSaved)} · ${fmt(totalShares)}` : "—"}
           </div>
+          <StatDelta curr={hasMetrics ? totalSaved + totalShares : null} prev={prevSavedShares > 0 ? prevSavedShares : null} />
         </div>
         {bestPost && bestPost.reach && (
           <div className="stat-card" style={{ gridColumn: "span 1" }}>

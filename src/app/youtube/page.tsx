@@ -3,6 +3,9 @@ import { getConnectedYoutubeAccount } from "@/lib/youtube/account-store";
 import { YoutubeVideoForm } from "@/components/YoutubeVideoForm";
 import { YoutubeVideoList, type YoutubeVideoRow } from "@/components/YoutubeVideoList";
 import { YoutubeVideoGrid, type YoutubeGridRow } from "@/components/YoutubeVideoGrid";
+import { KeyInsights } from "@/components/KeyInsights";
+import { buildYoutubeKeyInsights } from "@/lib/youtube-key-insights";
+import { StatDelta } from "@/components/StatDelta";
 
 export const dynamic = "force-dynamic";
 
@@ -31,12 +34,20 @@ export default async function YoutubePage() {
     );
   }
 
-  const [videos, allMetrics, pillars, lastChannelSnapshot] = await Promise.all([
+  const [videos, allMetrics, pillars, channelSnapshots] = await Promise.all([
     db.query.youtubeVideos.findMany({ orderBy: (v, { desc }) => [desc(v.scheduledAt)] }),
     db.query.youtubeVideoMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }),
     db.query.pillars.findMany(),
-    db.query.youtubeChannelMetrics.findFirst({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }).catch(() => null),
+    db.query.youtubeChannelMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }).catch(() => []),
   ]);
+
+  const lastChannelSnapshot = channelSnapshots[0] ?? null;
+  // Snapshot más cercano a "hace una semana" (mínimo 5 días atrás) para los
+  // deltas — recién va a existir cuando el sync diario acumule historial.
+  const nowMs = new Date().getTime();
+  const weekAgoSnapshot = channelSnapshots.find(
+    (s) => nowMs - s.capturedAt.getTime() >= 5 * 24 * 60 * 60 * 1000
+  ) ?? null;
 
   const pillarById = new Map(pillars.map((p) => [p.id, p.label]));
   const latestMetrics = new Map<number, (typeof allMetrics)[0]>();
@@ -95,6 +106,12 @@ export default async function YoutubePage() {
 
   const pendingRows = rows.filter((r) => r.status !== "PUBLISHED");
 
+  const keyInsights = buildYoutubeKeyInsights({
+    rows: gridRows,
+    subsNow: lastChannelSnapshot?.subscriberCount ?? null,
+    subsPrev: weekAgoSnapshot?.subscriberCount ?? null,
+  });
+
   return (
     <main className="page">
       <div className="page-header">
@@ -102,14 +119,18 @@ export default async function YoutubePage() {
         <p className="page-subtitle">Canal: {account.channelTitle}</p>
       </div>
 
+      <KeyInsights insights={keyInsights} />
+
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
         <div className="stat-card">
           <div className="stat-label">Suscriptores</div>
           <div className="stat-value accent">{fmt(lastChannelSnapshot?.subscriberCount)}</div>
+          <StatDelta curr={lastChannelSnapshot?.subscriberCount} prev={weekAgoSnapshot?.subscriberCount} />
         </div>
         <div className="stat-card">
           <div className="stat-label">Vistas totales (canal)</div>
           <div className="stat-value">{fmt(lastChannelSnapshot?.viewCount)}</div>
+          <StatDelta curr={lastChannelSnapshot?.viewCount} prev={weekAgoSnapshot?.viewCount} />
         </div>
         <div className="stat-card">
           <div className="stat-label">Vistas (videos acá cargados)</div>

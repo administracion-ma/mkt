@@ -7,6 +7,7 @@ import { getConnectedAdAccount } from "@/lib/ads/account-store";
 import { getAnalyticsRows } from "@/lib/analytics-data";
 import { getUsdRate } from "@/lib/fx";
 import { ActionItemsList } from "@/components/ActionItemsList";
+import { StatDelta } from "@/components/StatDelta";
 
 export const dynamic = "force-dynamic";
 
@@ -57,39 +58,56 @@ export default async function HomePage() {
 
   const to = new Date();
   const from = new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const prevFrom = new Date(from.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const [openItems, organicRows, adInsightRows, periodSales, usdRate] = await Promise.all([
+  const [openItems, organicRows, prevOrganicRows, adInsightRows, prevAdInsightRows, periodSales, prevSales, usdRate] = await Promise.all([
     db.query.actionItems.findMany({
       where: eq(actionItems.status, "open"),
       orderBy: (a, { desc }) => [desc(a.createdAt)],
     }),
     igAccount ? getAnalyticsRows(from, to) : Promise.resolve([]),
+    igAccount ? getAnalyticsRows(prevFrom, from) : Promise.resolve([]),
     adAccount
       ? db.query.adInsights.findMany({ where: and(gte(adInsights.date, from), lte(adInsights.date, to)) })
       : Promise.resolve([]),
     adAccount
+      ? db.query.adInsights.findMany({ where: and(gte(adInsights.date, prevFrom), lte(adInsights.date, from)) })
+      : Promise.resolve([]),
+    adAccount
       ? db.query.sales.findMany({ where: and(gte(sales.occurredAt, from), lte(sales.occurredAt, to)) }).catch(() => [])
+      : Promise.resolve([]),
+    adAccount
+      ? db.query.sales.findMany({ where: and(gte(sales.occurredAt, prevFrom), lte(sales.occurredAt, from)) }).catch(() => [])
       : Promise.resolve([]),
     adAccount ? getUsdRate(adAccount.currency) : Promise.resolve(null),
   ]);
 
-  const withMetrics = organicRows.filter((r) => r.reach != null && r.reach > 0);
-  const avgReach = withMetrics.length > 0
-    ? Math.round(withMetrics.reduce((s, r) => s + (r.reach ?? 0), 0) / withMetrics.length)
-    : null;
-  const erValues = withMetrics
-    .map((r) => {
-      if (!r.reach) return null;
-      const interactions = (r.likeCount ?? 0) + (r.commentCount ?? 0) + (r.savedCount ?? 0) + (r.sharesCount ?? 0);
-      return interactions / r.reach;
-    })
-    .filter((v): v is number => v != null);
-  const avgER = erValues.length > 0 ? erValues.reduce((s, v) => s + v, 0) / erValues.length : null;
+  const organicAggregates = (rows: typeof organicRows) => {
+    const withMetrics = rows.filter((r) => r.reach != null && r.reach > 0);
+    const avgReach = withMetrics.length > 0
+      ? Math.round(withMetrics.reduce((s, r) => s + (r.reach ?? 0), 0) / withMetrics.length)
+      : null;
+    const erValues = withMetrics
+      .map((r) => {
+        if (!r.reach) return null;
+        const interactions = (r.likeCount ?? 0) + (r.commentCount ?? 0) + (r.savedCount ?? 0) + (r.sharesCount ?? 0);
+        return interactions / r.reach;
+      })
+      .filter((v): v is number => v != null);
+    const avgER = erValues.length > 0 ? erValues.reduce((s, v) => s + v, 0) / erValues.length : null;
+    return { avgReach, avgER };
+  };
+
+  const { avgReach, avgER } = organicAggregates(organicRows);
+  const { avgReach: prevAvgReach, avgER: prevAvgER } = organicAggregates(prevOrganicRows);
 
   const toUsdOrRaw = (v: number | null) => (v != null && usdRate ? v / usdRate : v);
   const totalSpend = adInsightRows.reduce((s, r) => s + (toUsdOrRaw(r.spend) ?? 0), 0);
+  const prevTotalSpend = prevAdInsightRows.reduce((s, r) => s + (toUsdOrRaw(r.spend) ?? 0), 0);
   const totalRevenue = periodSales.reduce((s, r) => s + r.amountUsd, 0);
+  const prevRevenue = prevSales.reduce((s, r) => s + r.amountUsd, 0);
   const roas = totalSpend > 0 && periodSales.length > 0 ? totalRevenue / totalSpend : null;
+  const prevRoas = prevTotalSpend > 0 && prevSales.length > 0 ? prevRevenue / prevTotalSpend : null;
 
   // ⚠️ DEMO_FANTASIA — valores de relleno SOLO visuales (no se guardan en la
   // DB, no afectan informes de IA ni cálculos reales) para que el panel no se
@@ -118,10 +136,12 @@ export default async function HomePage() {
             <div className="stat-card">
               <div className="stat-label">Alcance prom. orgánico</div>
               <div className="stat-value">{fmt(displayAvgReach)}</div>
+              <StatDelta curr={avgReach} prev={prevAvgReach} />
             </div>
             <div className="stat-card">
               <div className="stat-label">ER% promedio</div>
               <div className="stat-value">{`${(displayAvgER * 100).toFixed(2)}%`}</div>
+              <StatDelta curr={avgER} prev={prevAvgER} />
             </div>
           </>
         )}
@@ -130,10 +150,12 @@ export default async function HomePage() {
             <div className="stat-card">
               <div className="stat-label">Gasto en pauta</div>
               <div className="stat-value accent">{fmtMoney(totalSpend)}</div>
+              <StatDelta curr={totalSpend} prev={prevTotalSpend > 0 ? prevTotalSpend : null} neutral />
             </div>
             <div className="stat-card">
               <div className="stat-label">ROAS</div>
               <div className="stat-value accent">{`${displayRoas.toFixed(1)}x`}</div>
+              <StatDelta curr={roas} prev={prevRoas} />
             </div>
           </>
         )}

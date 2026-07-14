@@ -14,6 +14,9 @@ import { AdsView } from "@/components/AdsView";
 import { LogSaleForm } from "@/components/LogSaleForm";
 import { AdsAnalysisPanel } from "@/components/AdsAnalysisPanel";
 import { PeriodFilter } from "@/components/PeriodFilter";
+import { StatDelta } from "@/components/StatDelta";
+import { KeyInsights } from "@/components/KeyInsights";
+import { buildAdsKeyInsights } from "@/lib/ads-key-insights";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +45,8 @@ export default async function AdsPage({
 
   const toDate = to ? new Date(to + "T23:59:59") : new Date();
   const fromDate = from ? new Date(from + "T00:00:00") : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+  // Ventana anterior del mismo largo, para los deltas de las stat cards.
+  const prevWindowFrom = new Date(fromDate.getTime() - (toDate.getTime() - fromDate.getTime()));
 
   // El historial mensual por anuncio ("¿algún mes empeoró?") tiene que mirar
   // mucho más atrás que el período elegido arriba de la página — si no, con
@@ -57,12 +62,18 @@ export default async function AdsPage({
       ? lastAdsReportAny
       : null;
 
-  const [campaigns, insightRows, adList, adInsightRows, allAdInsightRows, usdRate, allPillars, organicRows, periodSales] = await Promise.all([
+  const [campaigns, insightRows, prevInsightRows, prevSales, adList, adInsightRows, allAdInsightRows, usdRate, allPillars, organicRows, periodSales] = await Promise.all([
     db.query.adCampaigns.findMany(),
     db.query.adInsights.findMany({
       where: and(gte(adInsights.date, fromDate), lte(adInsights.date, toDate)),
       orderBy: (i, { asc }) => [asc(i.date)],
     }),
+    db.query.adInsights.findMany({
+      where: and(gte(adInsights.date, prevWindowFrom), lte(adInsights.date, fromDate)),
+    }),
+    db.query.sales.findMany({
+      where: and(gte(sales.occurredAt, prevWindowFrom), lte(sales.occurredAt, fromDate)),
+    }).catch(() => []),
     db.query.ads.findMany(),
     db.query.adCreativeInsights.findMany({
       where: and(gte(adCreativeInsights.date, fromDate), lte(adCreativeInsights.date, toDate)),
@@ -155,6 +166,31 @@ export default async function AdsPage({
   const totalRevenue = periodSales.reduce((s, r) => s + r.amountUsd, 0);
   const roas = totalSpend > 0 && periodSales.length > 0 ? totalRevenue / totalSpend : null;
 
+  // Totales del período anterior (mismo largo) para los deltas.
+  const prevSpend = prevInsightRows.reduce((s, r) => s + (toUsdOrRaw(r.spend) ?? 0), 0);
+  const prevImpressions = prevInsightRows.reduce((s, r) => s + (r.impressions ?? 0), 0);
+  const prevClicks = prevInsightRows.reduce((s, r) => s + (r.clicks ?? 0), 0);
+  const prevResults = prevInsightRows.reduce((s, r) => s + (r.results ?? 0), 0);
+  const prevMessages = prevInsightRows.reduce((s, r) => s + (r.messages ?? 0), 0);
+  const hasPrev = prevInsightRows.length > 0;
+  const prevCtr = prevImpressions > 0 ? (prevClicks / prevImpressions) * 100 : null;
+  const prevCpc = prevClicks > 0 ? prevSpend / prevClicks : null;
+  const prevCostPerResult = prevResults > 0 ? prevSpend / prevResults : null;
+  const prevRevenue = prevSales.reduce((s, r) => s + r.amountUsd, 0);
+  const prevRoas = prevSpend > 0 && prevSales.length > 0 ? prevRevenue / prevSpend : null;
+
+  const keyInsights = buildAdsKeyInsights({
+    adStats,
+    campaignStats,
+    unifiedRows,
+    adRowsLong: allAdRows,
+    spend: totalSpend,
+    prevSpend: hasPrev ? prevSpend : null,
+    costPerResult,
+    prevCostPerResult,
+    roas,
+  });
+
   const periodLabel =
     from && to
       ? `${new Date(from).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })} → ${new Date(to).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}`
@@ -181,6 +217,8 @@ export default async function AdsPage({
         <PeriodFilter />
       </div>
 
+      <KeyInsights insights={keyInsights} />
+
       <AdsAnalysisPanel
         key={`${from ?? "default"}-${to ?? "default"}`}
         initialSummary={lastAdsReport?.summary ?? null}
@@ -193,42 +231,52 @@ export default async function AdsPage({
         <div className="stat-card">
           <div className="stat-label">Inversión</div>
           <div className="stat-value accent">{fmtMoney(totalSpend)}</div>
+          <StatDelta curr={totalSpend} prev={hasPrev ? prevSpend : null} neutral />
         </div>
         <div className="stat-card">
           <div className="stat-label">Impresiones</div>
           <div className="stat-value">{fmt(totalImpressions)}</div>
+          <StatDelta curr={totalImpressions} prev={hasPrev ? prevImpressions : null} />
         </div>
         <div className="stat-card">
           <div className="stat-label">Clics</div>
           <div className="stat-value">{fmt(totalClicks)}</div>
+          <StatDelta curr={totalClicks} prev={hasPrev ? prevClicks : null} />
         </div>
         <div className="stat-card">
           <div className="stat-label">CTR</div>
           <div className="stat-value">{avgCtr != null ? `${avgCtr.toFixed(2)}%` : "—"}</div>
+          <StatDelta curr={avgCtr} prev={prevCtr} />
         </div>
         <div className="stat-card">
           <div className="stat-label">CPC</div>
           <div className="stat-value">{fmtMoney(avgCpc)}</div>
+          <StatDelta curr={avgCpc} prev={prevCpc} invert />
         </div>
         <div className="stat-card">
           <div className="stat-label">Resultados</div>
           <div className="stat-value">{totalResults || "—"}</div>
+          <StatDelta curr={totalResults || null} prev={prevResults || null} />
         </div>
         <div className="stat-card">
           <div className="stat-label">Mensajes</div>
           <div className="stat-value">{totalMessages || "—"}</div>
+          <StatDelta curr={totalMessages || null} prev={prevMessages || null} />
         </div>
         <div className="stat-card">
           <div className="stat-label">Costo/resultado</div>
           <div className="stat-value">{fmtMoney(costPerResult)}</div>
+          <StatDelta curr={costPerResult} prev={prevCostPerResult} invert />
         </div>
         <div className="stat-card">
           <div className="stat-label">Ingresos cargados</div>
           <div className="stat-value">{periodSales.length > 0 ? fmtMoney(totalRevenue) : "—"}</div>
+          <StatDelta curr={periodSales.length > 0 ? totalRevenue : null} prev={prevSales.length > 0 ? prevRevenue : null} />
         </div>
         <div className="stat-card">
           <div className="stat-label">ROAS</div>
           <div className="stat-value accent">{roas != null ? `${roas.toFixed(1)}x` : "—"}</div>
+          <StatDelta curr={roas} prev={prevRoas} />
         </div>
       </div>
 
