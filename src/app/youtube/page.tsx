@@ -92,9 +92,9 @@ export default async function YoutubePage() {
         youtubeUrl: v.youtubeUrl,
         pillarId: v.pillarId,
         pillarLabel: v.pillarId ? pillarById.get(v.pillarId) ?? null : null,
-        // Si el chequeo de Short todavía no corrió (null), la duración corta
-        // (≤3min, límite actual de Shorts) es un buen proxy hasta el próximo sync.
-        isShort: v.isShort ?? (v.durationSec != null ? v.durationSec <= 180 : false),
+        // Si el formato todavía no se detectó (null), solo ≤60s se asume Short
+        // — un horizontal de 2-3 min no debe caer acá; el sync lo resuelve.
+        isShort: v.isShort ?? (v.durationSec != null ? v.durationSec <= 60 : false),
         durationSec: v.durationSec,
         views: m?.views ?? null,
         likes: m?.likes ?? null,

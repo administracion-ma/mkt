@@ -203,16 +203,20 @@ export async function getVideosPublicInfo(accessToken: string, videoIds: string[
     for (const item of body.items ?? []) {
       const st = item.statistics;
       const stream = item.fileDetails?.videoStreams?.[0];
+      // aspectRatio es la relación de aspecto EN PANTALLA (ya contempla la
+      // metadata de rotación del archivo) — <1 = vertical. Adivinar con
+      // ancho/alto + rotation clasificaba mal videos horizontales editados
+      // que traen rotation espuria. Solo si falta, caemos a alto>ancho crudo.
+      const ar = stream?.aspectRatio != null ? Number(stream.aspectRatio) : null;
       const w = stream?.widthPixels != null ? Number(stream.widthPixels) : null;
       const h = stream?.heightPixels != null ? Number(stream.heightPixels) : null;
-      // rotation: algunos archivos se suben "acostados" con metadata de giro
-      const rotated = stream?.rotation === "clockwise" || stream?.rotation === "counterClockwise";
+      const isVertical = ar != null && ar > 0 ? ar < 1 : w != null && h != null ? h > w : null;
       out.set(item.id, {
         views: st?.viewCount != null ? Number(st.viewCount) : null,
         likes: st?.likeCount != null ? Number(st.likeCount) : null,
         comments: st?.commentCount != null ? Number(st.commentCount) : null,
         durationSec: parseIsoDuration(item.contentDetails?.duration),
-        isVertical: w != null && h != null ? (rotated ? w > h : h > w) : null,
+        isVertical,
       });
     }
   }
