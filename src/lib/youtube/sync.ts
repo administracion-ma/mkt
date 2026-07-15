@@ -66,22 +66,31 @@ export async function syncAllYoutube(account: Account): Promise<{ synced: number
   const ids = published.map((v) => v.youtubeVideoId).filter((id): id is string => id != null);
   const publicInfo = await getVideosPublicInfo(account.accessToken, ids).catch(() => new Map<string, VideoPublicInfo>());
 
+  // De a 8 en paralelo: uno por uno, con decenas de videos importados, la
+  // suma de llamadas a la Analytics API superaba el límite de tiempo de la
+  // función de Vercel y el sync moría a la mitad (504).
+  const CHUNK = 8;
   let synced = 0;
-  for (const video of published) {
-    if (!video.youtubeVideoId) continue;
-    const info = publicInfo.get(video.youtubeVideoId);
+  for (let i = 0; i < published.length; i += CHUNK) {
+    const chunk = published.slice(i, i + CHUNK);
+    const results = await Promise.all(
+      chunk.map(async (video) => {
+        if (!video.youtubeVideoId) return false;
+        const info = publicInfo.get(video.youtubeVideoId);
 
-    if (info?.durationSec != null && video.durationSec == null) {
-      await db.update(youtubeVideos).set({ durationSec: info.durationSec }).where(eq(youtubeVideos.id, video.id));
-    }
-    // Se corrige SIEMPRE que difiera (no solo si es null): la detección
-    // anterior por URL guardó valores equivocados y hay que pisarlos.
-    if (info?.isVertical != null && video.isShort !== info.isVertical) {
-      await db.update(youtubeVideos).set({ isShort: info.isVertical }).where(eq(youtubeVideos.id, video.id));
-    }
+        if (info?.durationSec != null && video.durationSec == null) {
+          await db.update(youtubeVideos).set({ durationSec: info.durationSec }).where(eq(youtubeVideos.id, video.id));
+        }
+        // Se corrige SIEMPRE que difiera (no solo si es null): la detección
+        // anterior por URL guardó valores equivocados y hay que pisarlos.
+        if (info?.isVertical != null && video.isShort !== info.isVertical) {
+          await db.update(youtubeVideos).set({ isShort: info.isVertical }).where(eq(youtubeVideos.id, video.id));
+        }
 
-    const ok = await syncVideoInsights(video, account, info).catch(() => false);
-    if (ok) synced++;
+        return syncVideoInsights(video, account, info).catch(() => false);
+      })
+    );
+    synced += results.filter(Boolean).length;
   }
 
   return { synced, total: published.length };

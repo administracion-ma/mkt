@@ -7,6 +7,10 @@ import { ActionCard } from "@/components/admin/ActionCard";
 import { ConnectAdAccountForm } from "@/components/ConnectAdAccountForm";
 
 export const dynamic = "force-dynamic";
+// Las server actions de esta página (sincronizar YouTube/Ads, clasificar,
+// importar) hacen muchas llamadas a APIs externas — heredan este límite,
+// igual que las rutas pesadas de IA (300s). Sin esto las mata el default.
+export const maxDuration = 300;
 
 export default async function AdminPage() {
   const [adAccount, youtubeAccount] = await Promise.all([
