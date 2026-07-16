@@ -38,7 +38,8 @@ export function buildAdsKeyInsights(args: {
     insights.push({
       icon: "🔴",
       tone: "bad",
-      text: `"${d.ad.name}" tiene fatiga (frecuencia ${d.ad.frequency?.toFixed(1)}) y su costo/resultado viene empeorando — pausalo o renová el creativo.`,
+      text: `"${d.ad.name}" tiene fatiga (frecuencia ${d.ad.frequency?.toFixed(1)}) y su costo/resultado viene empeorando.`,
+      action: "Pausalo hoy en el Administrador de anuncios, o subí un creativo nuevo (otro video/imagen) a esa misma campaña.",
     });
   }
   if (!diagnosed.some((d) => d.fatigued && d.worsening)) {
@@ -47,7 +48,8 @@ export function buildAdsKeyInsights(args: {
       insights.push({
         icon: "⚠️",
         tone: "warn",
-        text: `"${onlyFatigued.ad.name}" está mostrándose demasiado a las mismas personas (frecuencia ${onlyFatigued.ad.frequency?.toFixed(1)}) — vigilalo, es la antesala de la fatiga.`,
+        text: `"${onlyFatigued.ad.name}" está mostrándose demasiado a las mismas personas (frecuencia ${onlyFatigued.ad.frequency?.toFixed(1)}) — es la antesala de la fatiga.`,
+        action: "Preparó un creativo de recambio esta semana; si el costo/resultado sube en el próximo período, pausá y rotá.",
       });
     }
   }
@@ -60,12 +62,14 @@ export function buildAdsKeyInsights(args: {
         icon: "📉",
         tone: "warn",
         text: `Cada resultado te está costando ${change.toFixed(0)}% más que el período anterior (${money(prevCostPerResult)} → ${money(costPerResult)}).`,
+        action: "Abrí la grilla de anuncios y mirá cuál empeoró (flechas rojas): suele ser fatiga de creativo o audiencia saturada. Rotá el creativo antes de tocar el presupuesto.",
       });
     } else if (change <= -10) {
       insights.push({
         icon: "📈",
         tone: "good",
         text: `La pauta se volvió más eficiente: cada resultado cuesta ${Math.abs(change).toFixed(0)}% menos que el período anterior (${money(prevCostPerResult)} → ${money(costPerResult)}).`,
+        action: "Buen momento para escalar: subí el presupuesto de la campaña más eficiente un 20% y mirá si mantiene el costo.",
       });
     }
   }
@@ -74,8 +78,8 @@ export function buildAdsKeyInsights(args: {
   if (roas != null) {
     insights.push(
       roas >= 1
-        ? { icon: "✅", tone: "good", text: `Cada dólar invertido en pauta devolvió $${roas.toFixed(2)} en ventas cargadas (ROAS ${roas.toFixed(1)}x).` }
-        : { icon: "🚨", tone: "bad", text: `La pauta todavía no se paga sola: cada dólar invertido devolvió $${roas.toFixed(2)} en ventas cargadas (ROAS ${roas.toFixed(1)}x).` }
+        ? { icon: "✅", tone: "good" as const, text: `Cada dólar invertido en pauta devolvió $${roas.toFixed(2)} en ventas cargadas (ROAS ${roas.toFixed(1)}x).`, action: "Mantené la inversión y cargá TODAS las ventas — con más datos el ROAS se vuelve confiable para decidir escalar." }
+        : { icon: "🚨", tone: "bad" as const, text: `La pauta todavía no se paga sola: cada dólar invertido devolvió $${roas.toFixed(2)} en ventas cargadas (ROAS ${roas.toFixed(1)}x).`, action: "Antes de recortar: confirmá que estén cargadas todas las ventas del período. Si el ROAS real sigue <1, mové presupuesto a la campaña más eficiente." }
     );
   }
 
@@ -86,7 +90,8 @@ export function buildAdsKeyInsights(args: {
     insights.push({
       icon: "🏆",
       tone: "good",
-      text: `"${best.name}" es tu campaña más eficiente (${money(best.costPerResult)} por resultado) — candidata a recibir más presupuesto.`,
+      text: `"${best.name}" es tu campaña más eficiente (${money(best.costPerResult)} por resultado).`,
+      action: "Movele 20-30% del presupuesto de la campaña menos eficiente y comparó en una semana.",
     });
   }
 
@@ -96,7 +101,8 @@ export function buildAdsKeyInsights(args: {
     insights.push({
       icon: "⚠️",
       tone: "warn",
-      text: `Estás poniendo pauta en "${paidNoOrganic.label}" (${money(paidNoOrganic.paidSpend)}) pero no publicaste nada orgánico de ese pilar en el período — la pauta rinde más cuando acompaña contenido vivo.`,
+      text: `Estás poniendo pauta en "${paidNoOrganic.label}" (${money(paidNoOrganic.paidSpend)}) pero no publicaste nada orgánico de ese pilar en el período.`,
+      action: `Programá al menos 1 post orgánico de "${paidNoOrganic.label}" esta semana — la pauta rinde más cuando acompaña contenido vivo.`,
     });
   }
 

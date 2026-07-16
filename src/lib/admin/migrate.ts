@@ -299,4 +299,14 @@ export async function applyMigration(): Promise<void> {
       view_count integer
     );
   `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS marketing_goals (
+      id serial PRIMARY KEY,
+      monthly_ad_budget_usd double precision,
+      monthly_sales_target_usd double precision,
+      weekly_posts_target integer,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
 }

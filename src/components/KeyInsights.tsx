@@ -33,6 +33,11 @@ export function KeyInsights({ insights }: { insights: KeyInsight[] }) {
             <span style={{ fontSize: "1rem", lineHeight: 1.3 }}>{insight.icon}</span>
             <span style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
               {insight.text}
+              {insight.action && (
+                <span style={{ display: "block", marginTop: "0.25rem", color: "var(--text)", fontWeight: 600 }}>
+                  → Qué hacer: <span style={{ fontWeight: 500, color: "var(--text-secondary)" }}>{insight.action}</span>
+                </span>
+              )}
             </span>
           </div>
         ))}

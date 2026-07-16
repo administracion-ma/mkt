@@ -46,6 +46,7 @@ export async function getAnalyticsRows(from?: Date, to?: Date): Promise<InsightR
       avgWatchTimeMs: m?.avgWatchTimeMs ?? null,
       skipRate: m?.skipRate ?? null,
       followsCount: m?.followsCount ?? null,
+      profileVisits: m?.profileVisits ?? null,
     };
   });
 }

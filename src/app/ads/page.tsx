@@ -16,6 +16,7 @@ import { LogSaleForm } from "@/components/LogSaleForm";
 import { AdsAnalysisPanel } from "@/components/AdsAnalysisPanel";
 import { PeriodFilter } from "@/components/PeriodFilter";
 import { StatDelta } from "@/components/StatDelta";
+import { StatLabel } from "@/components/StatLabel";
 import { KeyInsights } from "@/components/KeyInsights";
 import { buildAdsKeyInsights } from "@/lib/ads-key-insights";
 
@@ -256,52 +257,52 @@ export default async function AdsPage({
 
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
         <div className="stat-card">
-          <div className="stat-label">Inversión</div>
+          <StatLabel label="Inversión" info="Total gastado en Meta Ads en el período, en USD." />
           <div className="stat-value accent">{fmtMoney(totalSpend)}</div>
           <StatDelta curr={totalSpend} prev={hasPrev ? prevSpend : null} neutral />
         </div>
         <div className="stat-card">
-          <div className="stat-label">Impresiones</div>
+          <StatLabel label="Impresiones" info="Veces que se mostraron tus anuncios (una persona puede verlos varias veces)." />
           <div className="stat-value">{fmt(totalImpressions)}</div>
           <StatDelta curr={totalImpressions} prev={hasPrev ? prevImpressions : null} />
         </div>
         <div className="stat-card">
-          <div className="stat-label">Clics</div>
+          <StatLabel label="Clics" info="Clics totales en los anuncios. Muchos clics con pocos resultados = la landing/oferta no cierra." />
           <div className="stat-value">{fmt(totalClicks)}</div>
           <StatDelta curr={totalClicks} prev={hasPrev ? prevClicks : null} />
         </div>
         <div className="stat-card">
-          <div className="stat-label">CTR</div>
+          <StatLabel label="CTR" info="% de impresiones que hicieron clic. Sano en Meta: 1-2%. Bajo = el creativo no llama la atención." />
           <div className="stat-value">{avgCtr != null ? `${avgCtr.toFixed(2)}%` : "—"}</div>
           <StatDelta curr={avgCtr} prev={prevCtr} />
         </div>
         <div className="stat-card">
-          <div className="stat-label">CPC</div>
+          <StatLabel label="CPC" info="Costo por clic. Cuanto más bajo mejor — sube cuando el creativo se gasta o la audiencia se satura." />
           <div className="stat-value">{fmtMoney(avgCpc)}</div>
           <StatDelta curr={avgCpc} prev={prevCpc} invert />
         </div>
         <div className="stat-card">
-          <div className="stat-label">Resultados</div>
+          <StatLabel label="Resultados" info="Acciones que Meta cuenta como conversión de la campaña (mensajes, leads, etc. según el objetivo)." />
           <div className="stat-value">{totalResults || "—"}</div>
           <StatDelta curr={totalResults || null} prev={prevResults || null} />
         </div>
         <div className="stat-card">
-          <div className="stat-label">Mensajes</div>
+          <StatLabel label="Mensajes" info="Conversaciones iniciadas desde anuncios — el paso previo a la venta en el modelo de Coinbox." />
           <div className="stat-value">{totalMessages || "—"}</div>
           <StatDelta curr={totalMessages || null} prev={prevMessages || null} />
         </div>
         <div className="stat-card">
-          <div className="stat-label">Costo/resultado</div>
+          <StatLabel label="Costo/resultado" info="Cuánto pagás por cada resultado. LA métrica para comparar campañas — cuanto más baja, mejor." />
           <div className="stat-value">{fmtMoney(costPerResult)}</div>
           <StatDelta curr={costPerResult} prev={prevCostPerResult} invert />
         </div>
         <div className="stat-card">
-          <div className="stat-label">Ingresos cargados</div>
+          <StatLabel label="Ingresos cargados" info="Ventas cargadas a mano en este período. Sin esto no hay ROAS real." />
           <div className="stat-value">{periodSales.length > 0 ? fmtMoney(totalRevenue) : "—"}</div>
           <StatDelta curr={periodSales.length > 0 ? totalRevenue : null} prev={prevSales.length > 0 ? prevRevenue : null} />
         </div>
         <div className="stat-card">
-          <div className="stat-label">ROAS</div>
+          <StatLabel label="ROAS" info="Retorno de la pauta: ingresos ÷ gasto. 2x = cada dólar invertido devolvió dos. Menos de 1x = pérdida." />
           <div className="stat-value accent">{roas != null ? `${roas.toFixed(1)}x` : "—"}</div>
           <StatDelta curr={roas} prev={prevRoas} />
         </div>

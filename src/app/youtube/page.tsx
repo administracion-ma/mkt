@@ -6,6 +6,7 @@ import { YoutubeVideoGrid, type YoutubeGridRow } from "@/components/YoutubeVideo
 import { KeyInsights } from "@/components/KeyInsights";
 import { buildYoutubeKeyInsights } from "@/lib/youtube-key-insights";
 import { StatDelta } from "@/components/StatDelta";
+import { StatLabel } from "@/components/StatLabel";
 
 export const dynamic = "force-dynamic";
 
@@ -124,21 +125,21 @@ export default async function YoutubePage() {
 
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
         <div className="stat-card">
-          <div className="stat-label">Suscriptores</div>
+          <StatLabel label="Suscriptores" info="Total de suscriptores del canal. El delta de abajo compara contra hace una semana." />
           <div className="stat-value accent">{fmt(lastChannelSnapshot?.subscriberCount)}</div>
           <StatDelta curr={lastChannelSnapshot?.subscriberCount} prev={weekAgoSnapshot?.subscriberCount} />
         </div>
         <div className="stat-card">
-          <div className="stat-label">Vistas totales (canal)</div>
+          <StatLabel label="Vistas totales (canal)" info="Vistas acumuladas de todo el canal desde su creación (dato de YouTube)." />
           <div className="stat-value">{fmt(lastChannelSnapshot?.viewCount)}</div>
           <StatDelta curr={lastChannelSnapshot?.viewCount} prev={weekAgoSnapshot?.viewCount} />
         </div>
         <div className="stat-card">
-          <div className="stat-label">Vistas (videos acá cargados)</div>
+          <StatLabel label="Vistas (videos acá cargados)" info="Suma de vistas de los videos trackeados en esta app (importados o publicados desde acá)." />
           <div className="stat-value">{fmt(totalViews)}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Publicados / Programados</div>
+          <StatLabel label="Publicados / Programados" info="Videos ya publicados vs. los que esperan su fecha de publicación programada." />
           <div className="stat-value">{publishedCount} / {scheduledCount}</div>
         </div>
       </div>

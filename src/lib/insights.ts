@@ -19,6 +19,7 @@ export type InsightRow = {
   avgWatchTimeMs: number | null;
   skipRate: number | null;
   followsCount: number | null;
+  profileVisits?: number | null;
   videoDurationMs: number | null;
 };
 

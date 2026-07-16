@@ -312,3 +312,14 @@ export const youtubeChannelMetrics = pgTable("youtube_channel_metrics", {
   subscriberCount: integer("subscriber_count"),
   viewCount: integer("view_count"),
 });
+
+// Metas del área — una sola fila, editable desde /settings. Sin metas los
+// deltas son relativos ("subió 10%"); con metas el panel puede decir si vas
+// bien o mal contra TU número, no contra la semana pasada.
+export const marketingGoals = pgTable("marketing_goals", {
+  id: serial("id").primaryKey(),
+  monthlyAdBudgetUsd: doublePrecision("monthly_ad_budget_usd"),
+  monthlySalesTargetUsd: doublePrecision("monthly_sales_target_usd"),
+  weeklyPostsTarget: integer("weekly_posts_target"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

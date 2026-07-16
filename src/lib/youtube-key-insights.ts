@@ -31,7 +31,8 @@ export function buildYoutubeKeyInsights(args: {
       insights.push({
         icon: "🚨",
         tone: "bad",
-        text: `Hace ${daysSince} días que no se publica nada en YouTube — el algoritmo premia la constancia, retomá la cadencia antes de optimizar otra cosa.`,
+        text: `Hace ${daysSince} días que no se publica nada en YouTube — el algoritmo premia la constancia.`,
+        action: "Programá 1 Short esta semana aunque sea reciclando el mejor reel de IG — retomar la cadencia va antes que optimizar cualquier otra cosa.",
       });
     }
   }
@@ -42,7 +43,7 @@ export function buildYoutubeKeyInsights(args: {
     insights.push(
       diff > 0
         ? { icon: "📈", tone: "good", text: `Ganaste ${diff} suscriptor${diff !== 1 ? "es" : ""} en la última semana (${fmt(subsPrev)} → ${fmt(subsNow)}).` }
-        : { icon: "📉", tone: "warn", text: `Perdiste ${Math.abs(diff)} suscriptor${diff !== -1 ? "es" : ""} en la última semana (${fmt(subsPrev)} → ${fmt(subsNow)}).` }
+        : { icon: "📉", tone: "warn" as const, text: `Perdiste ${Math.abs(diff)} suscriptor${diff !== -1 ? "es" : ""} en la última semana (${fmt(subsPrev)} → ${fmt(subsNow)}).`, action: "Mirá qué publicaste justo antes de la caída — si un video trajo subs de mala calidad o spam, no repitas ese enfoque." }
     );
   }
 
@@ -58,8 +59,11 @@ export function buildYoutubeKeyInsights(args: {
         icon: "🎬",
         tone: "neutral",
         text: shortsWin
-          ? `Tus Shorts promedian ${fmt(ms)} vistas contra ${fmt(ml)} de los videos largos — el formato corto es tu motor de alcance, dale prioridad.`
+          ? `Tus Shorts promedian ${fmt(ms)} vistas contra ${fmt(ml)} de los videos largos — el formato corto es tu motor de alcance.`
           : `Tus videos largos promedian ${fmt(ml)} vistas contra ${fmt(ms)} de los Shorts — tu audiencia responde mejor al contenido largo.`,
+        action: shortsWin
+          ? "Priorizá Shorts en el plan semanal y usá los largos para profundizar los temas que ya funcionaron en corto."
+          : "Dale más producción a los videos largos y usá los Shorts como tráiler para empujarlos.",
       });
     }
   }
@@ -74,7 +78,8 @@ export function buildYoutubeKeyInsights(args: {
       insights.push({
         icon: "🏆",
         tone: "good",
-        text: `"${best.title.slice(0, 60)}" es tu mejor video del último mes (${fmt(best.views)} vistas, ${(best.views / med).toFixed(1)}x tu mediana) — repetí ese tema/formato.`,
+        text: `"${best.title.slice(0, 60)}" es tu mejor video del último mes (${fmt(best.views)} vistas, ${(best.views / med).toFixed(1)}x tu mediana).`,
+        action: "Hacé una secuela o una variante del mismo tema/formato esta semana, mientras el algoritmo todavía lo asocia con tu canal.",
       });
     }
   }
@@ -87,13 +92,15 @@ export function buildYoutubeKeyInsights(args: {
       insights.push({
         icon: "⚠️",
         tone: "warn",
-        text: `La retención mediana de tus Shorts es ${mr.toFixed(0)}% — la mitad del video no se ve. Arrancá más fuerte el primer segundo y acortá los que superen 45s.`,
+        text: `La retención mediana de tus Shorts es ${mr.toFixed(0)}% — la mitad del video no se ve.`,
+        action: "Arrancá más fuerte el primer segundo (sin intro) y acortá los que superen 45s.",
       });
     } else if (mr >= 70) {
       insights.push({
         icon: "✅",
         tone: "good",
-        text: `Tus Shorts retienen muy bien (mediana ${mr.toFixed(0)}%) — el formato está funcionando, es cuestión de subir la frecuencia.`,
+        text: `Tus Shorts retienen muy bien (mediana ${mr.toFixed(0)}%) — el formato está funcionando.`,
+        action: "Subí la frecuencia de Shorts: el techo acá no es la calidad, es la cantidad.",
       });
     }
   }

@@ -13,6 +13,7 @@ import { AnalysisPanel } from "@/components/AnalysisPanel";
 import { KeyInsights } from "@/components/KeyInsights";
 import { buildKeyInsights } from "@/lib/key-insights";
 import { StatDelta } from "@/components/StatDelta";
+import { StatLabel } from "@/components/StatLabel";
 import { getAnalyticsRows } from "@/lib/analytics-data";
 
 export const dynamic = "force-dynamic";
@@ -291,26 +292,26 @@ export default async function AnalyticsPage({
       {/* Stats grid */}
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
         <div className="stat-card">
-          <div className="stat-label">Posts en período</div>
+          <StatLabel label="Posts en período" info="Publicaciones que salieron en el período elegido. La constancia pesa tanto como la calidad para el algoritmo." />
           <div className="stat-value">{publishedPosts.length}</div>
           <StatDelta curr={publishedPosts.length} prev={prevRows.length > 0 ? prevRows.length : null} />
         </div>
         <div className="stat-card">
-          <div className="stat-label">Alcance promedio</div>
+          <StatLabel label="Alcance promedio" info="Personas únicas promedio que vio cada post. La métrica base de distribución." />
           <div className={`stat-value${avgReach ? " accent" : ""}`}>
             {fmt(avgReach)}
           </div>
           <StatDelta curr={avgReach} prev={prevAvgReach} />
         </div>
         <div className="stat-card">
-          <div className="stat-label">ER% promedio</div>
+          <StatLabel label="ER% promedio" info="Engagement rate: interacciones sobre alcance. Sano: 3-6%. Mide si el contenido conecta, no solo si se ve." />
           <div className={`stat-value${avgER != null && avgER >= 0.05 ? " accent" : ""}`}>
             {avgER != null ? `${(avgER * 100).toFixed(2)}%` : "—"}
           </div>
           <StatDelta curr={avgER} prev={prevAvgER} />
         </div>
         <div className="stat-card">
-          <div className="stat-label">Guardados · Shares</div>
+          <StatLabel label="Guardados · Shares" info="Las 2 señales que más premia el algoritmo de Instagram en 2026 — valen más que los likes." />
           <div className="stat-value">
             {hasMetrics ? `${fmt(totalSaved)} · ${fmt(totalShares)}` : "—"}
           </div>
