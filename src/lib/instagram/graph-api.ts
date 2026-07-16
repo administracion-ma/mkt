@@ -81,6 +81,42 @@ export async function getRecentMedia(
   }));
 }
 
+// Solo la primera página (los posts más nuevos) — usada por el descubrimiento
+// incremental en cada sync, donde no hace falta paginar todo el historial
+// como sí hace getAllInstagramMedia (import inicial completo).
+export async function getRecentInstagramMedia(
+  igUserId: string,
+  accessToken: string,
+  limit = 25
+): Promise<IgRecentMedia[]> {
+  const data = await graphGet<{
+    data: Array<{
+      id: string;
+      caption?: string;
+      media_type: string;
+      permalink: string;
+      timestamp: string;
+      media_url?: string;
+      thumbnail_url?: string;
+      duration?: number;
+    }>;
+  }>(`/${igUserId}/media`, {
+    fields: "id,caption,media_type,permalink,timestamp,media_url,thumbnail_url,duration",
+    limit: String(limit),
+    access_token: accessToken,
+  });
+
+  return data.data.map((item) => ({
+    id: item.id,
+    caption: item.caption,
+    mediaType: item.media_type,
+    permalink: item.permalink,
+    timestamp: item.timestamp,
+    mediaUrl: item.media_url ?? item.thumbnail_url ?? item.permalink,
+    videoDurationMs: item.duration != null ? Math.round(item.duration * 1000) : undefined,
+  }));
+}
+
 export async function getAllInstagramMedia(
   igUserId: string,
   accessToken: string

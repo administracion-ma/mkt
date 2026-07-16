@@ -3,12 +3,36 @@ import { db } from "../src/db/client";
 import { posts } from "../src/db/schema";
 import { getConnectedAccount } from "../src/lib/instagram/account-store";
 import { syncPostInsights, snapshotAccount } from "../src/lib/instagram/sync";
+import { importNewMedia } from "../src/lib/instagram/import";
+import { classifyImportedPosts } from "../src/lib/pillars/classify";
 
 async function main() {
   const account = await getConnectedAccount();
   if (!account) {
     console.log("No hay ninguna cuenta de Instagram conectada.");
     return;
+  }
+
+  // Descubrimiento: si publicaron un post directo en Instagram (sin pasar
+  // por la app), nunca entra a `posts` y el loop de métricas de abajo ni se
+  // entera de que existe. Se hace ANTES para que reciba métricas en esta
+  // misma corrida. Tolerante a fallos: si la Graph API se cae, el sync de
+  // los posts ya conocidos tiene que seguir andando igual.
+  try {
+    const { imported, newPostIds } = await importNewMedia(account);
+    if (imported > 0) {
+      console.log(`Descubiertos ${imported} post(s) nuevo(s) publicados directo en Instagram.`);
+      try {
+        await classifyImportedPosts((msg) => console.log(`   [clasificación] ${msg}`), newPostIds);
+      } catch (err) {
+        console.error(
+          "Clasificación de posts nuevos FALLÓ (quedan en el pilar por defecto):",
+          err instanceof Error ? err.message : err
+        );
+      }
+    }
+  } catch (err) {
+    console.error("Descubrimiento de posts nuevos FALLÓ:", err instanceof Error ? err.message : err);
   }
 
   try {

@@ -4,6 +4,8 @@ import { db } from "@/db/client";
 import { posts } from "@/db/schema";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
 import { syncPostInsights, snapshotAccount } from "@/lib/instagram/sync";
+import { importNewMedia } from "@/lib/instagram/import";
+import { classifyImportedPosts } from "@/lib/pillars/classify";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -18,6 +20,25 @@ export async function POST() {
     return NextResponse.json({ error: "No hay cuenta conectada" }, { status: 400 });
   }
 
+  const errors: string[] = [];
+
+  // Descubrimiento: posts publicados directo en Instagram (sin pasar por la
+  // app) antes de sincronizar métricas — mismo motivo que el cron
+  // (scripts/sync-post-metrics.ts). Tolerante a fallos: si esto falla, el
+  // botón igual sincroniza las métricas de los posts que ya conocíamos.
+  try {
+    const { imported, newPostIds } = await importNewMedia(account);
+    if (imported > 0) {
+      try {
+        await classifyImportedPosts(() => {}, newPostIds);
+      } catch (err) {
+        errors.push(`clasificación: ${err instanceof Error ? err.message : "error"}`);
+      }
+    }
+  } catch (err) {
+    errors.push(`descubrimiento: ${err instanceof Error ? err.message : "error"}`);
+  }
+
   const recent = await db.query.posts.findMany({
     where: eq(posts.status, "PUBLISHED"),
     orderBy: [desc(posts.publishedAt)],
@@ -25,7 +46,6 @@ export async function POST() {
   });
 
   let synced = 0;
-  const errors: string[] = [];
 
   try {
     await snapshotAccount(account);

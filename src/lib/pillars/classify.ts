@@ -136,20 +136,24 @@ async function runClassification(
 }
 
 export async function classifyImportedPosts(
-  log: (msg: string) => void = () => {}
+  log: (msg: string) => void = () => {},
+  onlyIds?: number[]
 ): Promise<{ reclassified: number; movedToFallback: number; total: number }> {
   const { allPillars, importado } = await ensureFallbackPillar(log);
   const realPillarIds = allPillars.filter((p) => REAL_PILLAR_KEYS.includes(p.key)).map((p) => p.id);
 
   // Cualquier post que no esté ya en uno de los 8 pilares reales es candidato,
   // sea cual sea el pilar en el que haya quedado (no asumimos el nombre).
-  const targets =
-    realPillarIds.length > 0
-      ? await db.query.posts.findMany({
-          where: notInArray(posts.pillarId, realPillarIds),
-          columns: { id: true, caption: true, mediaType: true },
-        })
-      : await db.query.posts.findMany({ columns: { id: true, caption: true, mediaType: true } });
+  // Si se pasan ids puntuales (ej: posts recién descubiertos en un sync), se
+  // acota a esos — evita reclasificar toda la tabla en cada corrida.
+  const filters = [];
+  if (onlyIds && onlyIds.length > 0) filters.push(inArray(posts.id, onlyIds));
+  if (realPillarIds.length > 0) filters.push(notInArray(posts.pillarId, realPillarIds));
+
+  const targets = await db.query.posts.findMany({
+    where: filters.length > 0 ? and(...filters) : undefined,
+    columns: { id: true, caption: true, mediaType: true },
+  });
 
   if (targets.length === 0) {
     log("No hay posts para reclasificar — todos ya están en un pilar real.");

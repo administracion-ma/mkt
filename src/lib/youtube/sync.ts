@@ -1,10 +1,51 @@
 import { and, eq, gte, lt } from "drizzle-orm";
 import { db } from "@/db/client";
 import { youtubeVideos, youtubeVideoMetrics, youtubeChannelMetrics } from "@/db/schema";
-import { getVideoAnalytics, getChannelSummary, getVideosPublicInfo, type VideoPublicInfo } from "@/lib/youtube/api";
+import {
+  getVideoAnalytics,
+  getChannelSummary,
+  getVideosPublicInfo,
+  listUploadedVideos,
+  type VideoPublicInfo,
+} from "@/lib/youtube/api";
 
 type YoutubeVideo = typeof youtubeVideos.$inferSelect;
 type Account = { channelId: string; accessToken: string };
+
+// Descubrimiento: videos subidos directo al canal (sin pasar por la app)
+// nunca entran a `youtube_videos` salvo que se apriete "Importar videos" en
+// /admin. Se usa la playlist "uploads" del canal (mismo espíritu que
+// instagram/import.ts) e inserta los que todavía no existen por youtubeVideoId.
+// Compartida entre syncAllYoutube (cron) y la server action runYoutubeImport,
+// así no hay dos lugares insertando lo mismo.
+export async function importNewYoutubeVideos(account: Account): Promise<number> {
+  const uploaded = await listUploadedVideos(account.accessToken, account.channelId);
+  if (uploaded.length === 0) return 0;
+
+  const existing = await db.query.youtubeVideos.findMany({ columns: { youtubeVideoId: true } });
+  const known = new Set(existing.map((v) => v.youtubeVideoId).filter(Boolean));
+
+  let imported = 0;
+  for (const v of uploaded) {
+    if (known.has(v.videoId)) continue;
+    const publishedAt = new Date(v.publishedAt);
+    await db.insert(youtubeVideos).values({
+      title: v.title,
+      description: v.description,
+      // Importado: el archivo original no está en Blob, ya vive en YouTube.
+      videoFileUrl: `https://www.youtube.com/watch?v=${v.videoId}`,
+      privacyStatus: "public",
+      scheduledAt: publishedAt,
+      status: "PUBLISHED",
+      youtubeVideoId: v.videoId,
+      youtubeUrl: `https://www.youtube.com/watch?v=${v.videoId}`,
+      publishedAt,
+    });
+    imported++;
+  }
+
+  return imported;
+}
 
 // Sincroniza las métricas de un video publicado — un snapshot por día, igual
 // que instagram/sync.ts::syncPostInsights. `publicInfo` (contadores públicos,
@@ -60,6 +101,16 @@ export async function syncVideoInsights(video: YoutubeVideo, account: Account, p
 // Compartida entre el botón de /admin y el cron (scripts/sync-youtube.ts).
 // De paso completa duración y si es Short (una sola vez por video).
 export async function syncAllYoutube(account: Account): Promise<{ synced: number; total: number }> {
+  // Descubrimiento: si subieron un video directo al canal (sin pasar por la
+  // app), nunca entra a `youtube_videos` y el sync de abajo ni se entera.
+  // Tolerante a fallos — si la API falla acá, el sync de los videos ya
+  // conocidos tiene que seguir andando igual.
+  try {
+    await importNewYoutubeVideos(account);
+  } catch (err) {
+    console.error("Descubrimiento de videos de YouTube FALLÓ:", err instanceof Error ? err.message : err);
+  }
+
   await snapshotChannel(account);
 
   const published = await db.query.youtubeVideos.findMany({ where: eq(youtubeVideos.status, "PUBLISHED") });
