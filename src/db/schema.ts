@@ -323,3 +323,64 @@ export const marketingGoals = pgTable("marketing_goals", {
   weeklyPostsTarget: integer("weekly_posts_target"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// TikTok (Display API + Content Posting API) — OAuth2 propio con PKCE
+// (obligatorio en el flujo web de TikTok, a diferencia de Meta/Google). El
+// access token dura ~24h y el refresh token ~1 año: se refresca solo en cada
+// uso, mismo patrón que YouTube (ver tiktok/account-store.ts).
+export const tiktokAccounts = pgTable("tiktok_accounts", {
+  id: serial("id").primaryKey(),
+  openId: text("open_id").notNull(),
+  displayName: text("display_name").notNull(),
+  accessTokenEnc: text("access_token_enc").notNull(),
+  refreshTokenEnc: text("refresh_token_enc").notNull(),
+  tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const tiktokVideos = pgTable("tiktok_videos", {
+  id: serial("id").primaryKey(),
+  pillarId: integer("pillar_id").references(() => pillars.id),
+  title: text("title").notNull().default(""), // video_description en la API
+  videoFileUrl: text("video_file_url").notNull(),
+  // Hasta que TikTok audite la app, solo se puede publicar SELF_ONLY (privado)
+  // — lo pedimos igual como PUBLIC_TO_EVERYONE por si la app ya está auditada,
+  // pero TikTok lo va a bajar de nivel solo si no lo está.
+  privacyLevel: text("privacy_level").notNull().default("SELF_ONLY"),
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+  status: postStatusEnum("status").notNull().default("DRAFT"), // reusa el enum de posts (IG)
+  tiktokVideoId: text("tiktok_video_id"), // se completa cuando el status de publicación llega a PUBLISH_COMPLETE
+  tiktokUrl: text("tiktok_url"),
+  // La URL de portada de TikTok también expira — se refresca sola en cada
+  // sync (a diferencia de YouTube, no hace falta proxy: total ya se
+  // resincroniza a diario).
+  coverImageUrl: text("cover_image_url"),
+  publishId: text("publish_id"), // id de la publicación asíncrona, para consultar su estado
+  publishError: text("publish_error"),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Snapshot por video — TikTok solo da contadores públicos (view/like/comment/
+// share), sin retención ni demografía como YouTube.
+export const tiktokVideoMetrics = pgTable("tiktok_video_metrics", {
+  id: serial("id").primaryKey(),
+  videoId: integer("video_id").notNull().references(() => tiktokVideos.id),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  views: integer("views"),
+  likes: integer("likes"),
+  comments: integer("comments"),
+  shares: integer("shares"),
+});
+
+// Snapshot diario de la cuenta (seguidores) — igual que account_metrics de IG
+// y youtube_channel_metrics.
+export const tiktokAccountMetrics = pgTable("tiktok_account_metrics", {
+  id: serial("id").primaryKey(),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  followerCount: integer("follower_count"),
+  likesCount: integer("likes_count"), // total de likes acumulados de la cuenta
+  videoCount: integer("video_count"),
+});

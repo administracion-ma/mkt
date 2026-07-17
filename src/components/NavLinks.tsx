@@ -8,6 +8,7 @@ const links = [
   { href: "/analytics", label: "Analítica" },
   { href: "/ads", label: "Meta Ads" },
   { href: "/youtube", label: "YouTube" },
+  { href: "/tiktok", label: "TikTok" },
   { href: "/resumenes", label: "Resúmenes" },
   { href: "/settings", label: "Ficha de marca" },
 ];

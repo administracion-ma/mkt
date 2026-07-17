@@ -309,4 +309,59 @@ export async function applyMigration(): Promise<void> {
       updated_at timestamptz NOT NULL DEFAULT now()
     );
   `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS tiktok_accounts (
+      id serial PRIMARY KEY,
+      open_id text NOT NULL,
+      display_name text NOT NULL,
+      access_token_enc text NOT NULL,
+      refresh_token_enc text NOT NULL,
+      token_expires_at timestamptz NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS tiktok_videos (
+      id serial PRIMARY KEY,
+      pillar_id integer REFERENCES pillars(id),
+      title text NOT NULL DEFAULT '',
+      video_file_url text NOT NULL,
+      privacy_level text NOT NULL DEFAULT 'SELF_ONLY',
+      scheduled_at timestamptz NOT NULL,
+      status post_status NOT NULL DEFAULT 'DRAFT',
+      tiktok_video_id text,
+      tiktok_url text,
+      cover_image_url text,
+      publish_id text,
+      publish_error text,
+      published_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS tiktok_video_metrics (
+      id serial PRIMARY KEY,
+      video_id integer NOT NULL REFERENCES tiktok_videos(id),
+      captured_at timestamptz NOT NULL DEFAULT now(),
+      views integer,
+      likes integer,
+      comments integer,
+      shares integer
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS tiktok_account_metrics (
+      id serial PRIMARY KEY,
+      captured_at timestamptz NOT NULL DEFAULT now(),
+      follower_count integer,
+      likes_count integer,
+      video_count integer
+    );
+  `);
 }

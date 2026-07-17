@@ -18,7 +18,9 @@
     "classify:pillars": "tsx scripts/classify-pillars.ts",
     "report:weekly": "tsx scripts/weekly-report.ts",
     "publish:youtube": "tsx scripts/publish-scheduled-youtube.ts",
-    "sync:youtube": "tsx scripts/sync-youtube.ts"
+    "sync:youtube": "tsx scripts/sync-youtube.ts",
+    "publish:tiktok": "tsx scripts/publish-scheduled-tiktok.ts",
+    "sync:tiktok": "tsx scripts/sync-tiktok.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",

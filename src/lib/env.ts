@@ -46,6 +46,15 @@ export const env = {
   get youtubeRedirectUri() {
     return required("YOUTUBE_REDIRECT_URI");
   },
+  get tiktokClientKey() {
+    return required("TIKTOK_CLIENT_KEY");
+  },
+  get tiktokClientSecret() {
+    return required("TIKTOK_CLIENT_SECRET");
+  },
+  get tiktokRedirectUri() {
+    return required("TIKTOK_REDIRECT_URI");
+  },
   get resendApiKey() {
     return process.env.RESEND_API_KEY || null;
   },
