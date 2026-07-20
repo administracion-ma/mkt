@@ -39,3 +39,18 @@ function getClient() {
 }
 
 export const db = drizzle(getClient(), { schema });
+
+// Red de seguridad: corre una consulta con un tope de tiempo y, si se pasa (o
+// falla), devuelve un valor por defecto en vez de dejar la página colgada hasta
+// el timeout de la función (30s → 504). Ninguna consulta lenta puede volver a
+// tumbar una página: en el peor caso se ve un guion y el resto carga igual.
+export async function withTimeout<T, F = T>(promise: Promise<T>, fallback: F, ms = 9000): Promise<T | F> {
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<F>((resolve) => setTimeout(() => resolve(fallback), ms)),
+    ]);
+  } catch {
+    return fallback;
+  }
+}

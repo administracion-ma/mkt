@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { and, eq, gte, lte } from "drizzle-orm";
-import { db } from "@/db/client";
+import { db, withTimeout } from "@/db/client";
 import { adInsights, sales, actionItems, posts, youtubeVideos } from "@/db/schema";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
 import { getConnectedAdAccount } from "@/lib/ads/account-store";
@@ -108,38 +108,49 @@ export default async function HomePage() {
     periodSales, prevSales, usdRate, igSnapshots, ytSnapshots,
     goals, monthAdInsights, monthSales, weekPosts, lastYtVideo,
   ] = await Promise.all([
-    db.query.actionItems.findMany({
-      where: eq(actionItems.status, "open"),
-      orderBy: (a, { desc }) => [desc(a.createdAt)],
-    }).catch(() => []),
-    igAccount ? getAnalyticsRows(from, to).catch(() => []) : Promise.resolve([]),
-    igAccount ? getAnalyticsRows(prevFrom, from).catch(() => []) : Promise.resolve([]),
+    // Cada consulta va envuelta en withTimeout: si alguna se pasara de lenta,
+    // devuelve su valor por defecto y el panel igual carga (nunca más un 504
+    // por una sola consulta trabada).
+    withTimeout(
+      db.query.actionItems.findMany({
+        where: eq(actionItems.status, "open"),
+        orderBy: (a, { desc }) => [desc(a.createdAt)],
+      }),
+      [],
+    ),
+    igAccount ? withTimeout(getAnalyticsRows(from, to), []) : Promise.resolve([]),
+    igAccount ? withTimeout(getAnalyticsRows(prevFrom, from), []) : Promise.resolve([]),
     adAccount
-      ? db.query.adInsights.findMany({ where: and(gte(adInsights.date, from), lte(adInsights.date, to)) }).catch(() => [])
+      ? withTimeout(db.query.adInsights.findMany({ where: and(gte(adInsights.date, from), lte(adInsights.date, to)) }), [])
       : Promise.resolve([]),
     adAccount
-      ? db.query.adInsights.findMany({ where: and(gte(adInsights.date, prevFrom), lte(adInsights.date, from)) }).catch(() => [])
+      ? withTimeout(db.query.adInsights.findMany({ where: and(gte(adInsights.date, prevFrom), lte(adInsights.date, from)) }), [])
       : Promise.resolve([]),
     adAccount
-      ? db.query.sales.findMany({ where: and(gte(sales.occurredAt, from), lte(sales.occurredAt, to)) }).catch(() => [])
+      ? withTimeout(db.query.sales.findMany({ where: and(gte(sales.occurredAt, from), lte(sales.occurredAt, to)) }), [])
       : Promise.resolve([]),
     adAccount
-      ? db.query.sales.findMany({ where: and(gte(sales.occurredAt, prevFrom), lte(sales.occurredAt, from)) }).catch(() => [])
+      ? withTimeout(db.query.sales.findMany({ where: and(gte(sales.occurredAt, prevFrom), lte(sales.occurredAt, from)) }), [])
       : Promise.resolve([]),
-    adAccount ? getUsdRate(adAccount.currency) : Promise.resolve(null),
-    // Comunidad cross-red: seguidores IG + suscriptores YT, con historial
-    // para el delta semanal. .catch: las tablas pueden no existir aún.
-    db.query.accountMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }).catch(() => []),
-    db.query.youtubeChannelMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }).catch(() => []),
-    getGoals().catch(() => null),
+    adAccount ? withTimeout(getUsdRate(adAccount.currency), null) : Promise.resolve(null),
+    // Comunidad cross-red: seguidores IG + suscriptores YT. Acotado a los
+    // últimos 400 snapshots (sobra para el delta semanal) para no escanear
+    // toda la tabla histórica.
+    withTimeout(db.query.accountMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)], limit: 400 }), []),
+    withTimeout(db.query.youtubeChannelMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)], limit: 400 }), []),
+    withTimeout(getGoals(), null),
     adAccount
-      ? db.query.adInsights.findMany({ where: gte(adInsights.date, monthStart) }).catch(() => [])
+      ? withTimeout(db.query.adInsights.findMany({ where: gte(adInsights.date, monthStart) }), [])
       : Promise.resolve([]),
-    db.query.sales.findMany({ where: gte(sales.occurredAt, monthStart) }).catch(() => []),
-    db.query.posts.findMany({ where: gte(posts.scheduledAt, weekStart) }).catch(() => []),
-    db.query.youtubeVideos
-      .findFirst({ where: eq(youtubeVideos.status, "PUBLISHED"), orderBy: (v, { desc }) => [desc(v.publishedAt)] })
-      .catch(() => null),
+    withTimeout(db.query.sales.findMany({ where: gte(sales.occurredAt, monthStart) }), []),
+    withTimeout(db.query.posts.findMany({ where: gte(posts.scheduledAt, weekStart) }), []),
+    withTimeout(
+      db.query.youtubeVideos.findFirst({
+        where: eq(youtubeVideos.status, "PUBLISHED"),
+        orderBy: (v, { desc }) => [desc(v.publishedAt)],
+      }),
+      null,
+    ),
   ]);
 
   const weekMs = 7 * 24 * 60 * 60 * 1000;

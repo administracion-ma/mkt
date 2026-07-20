@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db } from "@/db/client";
 import { postMetrics, posts } from "@/db/schema";
 import type { InsightRow } from "@/lib/insights";
@@ -12,24 +12,23 @@ export async function getAnalyticsRows(from?: Date, to?: Date): Promise<InsightR
       from ? gte(posts.publishedAt, from) : undefined,
       to ? lte(posts.publishedAt, to) : undefined,
     ),
-    orderBy: (p, { desc }) => [desc(p.publishedAt)],
+    orderBy: (p, { desc: d }) => [d(p.publishedAt)],
   });
 
   if (publishedPosts.length === 0) return [];
 
   // Antes se leía la tabla ENTERA de métricas (todas las filas históricas de
-  // todos los posts) y encima dos veces por render en el panel. Con la data
-  // creciendo, eso se volvía lento y podía colgar la conexión hasta el 504.
-  // Ahora traemos solo las métricas de los posts de este rango.
-  const allMetrics = await db.query.postMetrics.findMany({
-    where: inArray(postMetrics.postId, publishedPosts.map((p) => p.id)),
-    orderBy: (m, { desc }) => [desc(m.capturedAt)],
-  });
+  // todos los posts) y se filtraba en memoria — con la data creciendo eso se
+  // volvía lentísimo y colgaba el panel (504). Ahora, con DISTINCT ON, la base
+  // devuelve directamente UNA sola fila por post (la última), apoyada en el
+  // índice (post_id, captured_at DESC). Instantáneo sin importar el tamaño.
+  const latestMetrics = await db
+    .selectDistinctOn([postMetrics.postId])
+    .from(postMetrics)
+    .where(inArray(postMetrics.postId, publishedPosts.map((p) => p.id)))
+    .orderBy(postMetrics.postId, desc(postMetrics.capturedAt));
 
-  const latest = new Map<number, (typeof allMetrics)[0]>();
-  for (const m of allMetrics) {
-    if (!latest.has(m.postId)) latest.set(m.postId, m);
-  }
+  const latest = new Map(latestMetrics.map((m) => [m.postId, m]));
 
   return publishedPosts.map((p) => {
     const m = latest.get(p.id);

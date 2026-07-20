@@ -364,4 +364,22 @@ export async function applyMigration(): Promise<void> {
       video_count integer
     );
   `);
+
+  // Índices de rendimiento. Sin esto, leer "la última métrica de cada post" o
+  // "los últimos snapshots del canal" obliga a escanear la tabla ENTERA — que
+  // con los robots corriendo a diario crece sin parar y termina tardando 12s+
+  // (causa real de que el panel se colgara con 504). Con estos índices esas
+  // lecturas son instantáneas sin importar cuánto crezcan las tablas.
+  // CREATE INDEX IF NOT EXISTS es idempotente: seguro correr esto muchas veces.
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_post_metrics_post_captured ON post_metrics (post_id, captured_at DESC);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_youtube_video_metrics_video_captured ON youtube_video_metrics (video_id, captured_at DESC);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_tiktok_video_metrics_video_captured ON tiktok_video_metrics (video_id, captured_at DESC);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_account_metrics_captured ON account_metrics (captured_at DESC);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_youtube_channel_metrics_captured ON youtube_channel_metrics (captured_at DESC);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_tiktok_account_metrics_captured ON tiktok_account_metrics (captured_at DESC);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_ad_insights_date ON ad_insights (date);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_sales_occurred ON sales (occurred_at);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_posts_status_published ON posts (status, published_at DESC);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_posts_scheduled ON posts (scheduled_at);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_action_items_status ON action_items (status);`);
 }
