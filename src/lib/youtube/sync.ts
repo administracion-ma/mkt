@@ -6,6 +6,7 @@ import {
   getChannelSummary,
   getVideosPublicInfo,
   listUploadedVideos,
+  SHORT_MAX_DURATION_SEC,
   type VideoPublicInfo,
 } from "@/lib/youtube/api";
 
@@ -129,13 +130,19 @@ export async function syncAllYoutube(account: Account): Promise<{ synced: number
         if (!video.youtubeVideoId) return false;
         const info = publicInfo.get(video.youtubeVideoId);
 
-        if (info?.durationSec != null && video.durationSec == null) {
-          await db.update(youtubeVideos).set({ durationSec: info.durationSec }).where(eq(youtubeVideos.id, video.id));
+        // Clasificación por duración (único dato confiable sin permisos
+        // especiales — ver comentario en api.ts sobre por qué se abandonó
+        // fileDetails). Se corrige SIEMPRE que difiera, no solo si es null:
+        // dos intentos anteriores (URL de /shorts/ y fileDetails) dejaron
+        // valores equivocados pegados para siempre porque nunca se pisaban.
+        const patch: Partial<typeof youtubeVideos.$inferInsert> = {};
+        if (info?.durationSec != null) {
+          if (video.durationSec !== info.durationSec) patch.durationSec = info.durationSec;
+          const shouldBeShort = info.durationSec <= SHORT_MAX_DURATION_SEC;
+          if (video.isShort !== shouldBeShort) patch.isShort = shouldBeShort;
         }
-        // Se corrige SIEMPRE que difiera (no solo si es null): la detección
-        // anterior por URL guardó valores equivocados y hay que pisarlos.
-        if (info?.isVertical != null && video.isShort !== info.isVertical) {
-          await db.update(youtubeVideos).set({ isShort: info.isVertical }).where(eq(youtubeVideos.id, video.id));
+        if (Object.keys(patch).length > 0) {
+          await db.update(youtubeVideos).set(patch).where(eq(youtubeVideos.id, video.id));
         }
 
         return syncVideoInsights(video, account, info).catch(() => false);

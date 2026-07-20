@@ -2,6 +2,7 @@ import { desc, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import { youtubeVideoMetrics } from "@/db/schema";
 import { getConnectedYoutubeAccount } from "@/lib/youtube/account-store";
+import { SHORT_MAX_DURATION_SEC } from "@/lib/youtube/api";
 import { YoutubeVideoForm } from "@/components/YoutubeVideoForm";
 import { YoutubeVideoList, type YoutubeVideoRow } from "@/components/YoutubeVideoList";
 import { YoutubeVideoGrid, type YoutubeGridRow } from "@/components/YoutubeVideoGrid";
@@ -106,9 +107,9 @@ export default async function YoutubePage() {
         youtubeUrl: v.youtubeUrl,
         pillarId: v.pillarId,
         pillarLabel: v.pillarId ? pillarById.get(v.pillarId) ?? null : null,
-        // Si el formato todavía no se detectó (null), solo ≤60s se asume Short
-        // — un horizontal de 2-3 min no debe caer acá; el sync lo resuelve.
-        isShort: v.isShort ?? (v.durationSec != null ? v.durationSec <= 60 : false),
+        // isShort se recalcula por duración en cada sync (sync.ts); acá solo
+        // cubrimos el instante entre "recién importado" y "primer sync".
+        isShort: v.isShort ?? (v.durationSec != null ? v.durationSec <= SHORT_MAX_DURATION_SEC : false),
         durationSec: v.durationSec,
         views: m?.views ?? null,
         likes: m?.likes ?? null,

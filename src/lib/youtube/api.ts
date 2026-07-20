@@ -171,8 +171,13 @@ export type VideoPublicInfo = {
   likes: number | null;
   comments: number | null;
   durationSec: number | null;
-  isVertical: boolean | null; // del archivo real (fileDetails) — vertical = Short
 };
+
+// Único criterio de Short vs. video largo: duración ≤60s. Sin permisos de
+// socio de YouTube no hay forma de leer la orientación real del archivo, así
+// que duración es la señal más confiable que tenemos sin necesitar permisos
+// especiales (ver comentario en getVideosPublicInfo).
+export const SHORT_MAX_DURATION_SEC = 60;
 
 function parseIsoDuration(iso: string | undefined): number | null {
   if (!iso) return null;
@@ -189,10 +194,15 @@ export async function getVideosPublicInfo(accessToken: string, videoIds: string[
   for (let i = 0; i < videoIds.length; i += 50) {
     const batch = videoIds.slice(i, i + 50);
     const url = new URL(`${DATA_API}/videos`);
-    // fileDetails (solo visible para el dueño del canal, que somos nosotros)
-    // trae el ancho/alto real del archivo — la forma confiable de saber si un
-    // video es vertical (Short) u horizontal, sin trucos de scraping.
-    url.searchParams.set("part", "statistics,contentDetails,fileDetails");
+    // NO pedimos fileDetails: esa parte requiere permisos de socio de YouTube
+    // (scope youtubepartner) que un canal normal no tiene. La pedíamos para
+    // sacar el ancho/alto real y saber si el video es vertical (Short), pero
+    // sin ese permiso la API la devuelve vacía siempre — la corrección nunca
+    // se aplicaba y quedaban pegados valores viejos y equivocados (algunos
+    // videos largos mostrando "Short" para siempre). contentDetails.duration
+    // sí es un dato público sin restricciones: se usa la duración como único
+    // criterio de clasificación (ver sync.ts).
+    url.searchParams.set("part", "statistics,contentDetails");
     url.searchParams.set("id", batch.join(","));
 
     const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(10000) });
@@ -202,21 +212,11 @@ export async function getVideosPublicInfo(accessToken: string, videoIds: string[
     }
     for (const item of body.items ?? []) {
       const st = item.statistics;
-      const stream = item.fileDetails?.videoStreams?.[0];
-      // aspectRatio es la relación de aspecto EN PANTALLA (ya contempla la
-      // metadata de rotación del archivo) — <1 = vertical. Adivinar con
-      // ancho/alto + rotation clasificaba mal videos horizontales editados
-      // que traen rotation espuria. Solo si falta, caemos a alto>ancho crudo.
-      const ar = stream?.aspectRatio != null ? Number(stream.aspectRatio) : null;
-      const w = stream?.widthPixels != null ? Number(stream.widthPixels) : null;
-      const h = stream?.heightPixels != null ? Number(stream.heightPixels) : null;
-      const isVertical = ar != null && ar > 0 ? ar < 1 : w != null && h != null ? h > w : null;
       out.set(item.id, {
         views: st?.viewCount != null ? Number(st.viewCount) : null,
         likes: st?.likeCount != null ? Number(st.likeCount) : null,
         comments: st?.commentCount != null ? Number(st.commentCount) : null,
         durationSec: parseIsoDuration(item.contentDetails?.duration),
-        isVertical,
       });
     }
   }
