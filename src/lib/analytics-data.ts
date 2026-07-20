@@ -1,24 +1,30 @@
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { db } from "@/db/client";
-import { posts } from "@/db/schema";
+import { postMetrics, posts } from "@/db/schema";
 import type { InsightRow } from "@/lib/insights";
 
 // Posts publicados + último snapshot de métricas por post.
 // Lo comparten la página de analítica y el endpoint del informe IA.
 export async function getAnalyticsRows(from?: Date, to?: Date): Promise<InsightRow[]> {
-  const [publishedPosts, allMetrics] = await Promise.all([
-    db.query.posts.findMany({
-      where: and(
-        eq(posts.status, "PUBLISHED"),
-        from ? gte(posts.publishedAt, from) : undefined,
-        to ? lte(posts.publishedAt, to) : undefined,
-      ),
-      orderBy: (p, { desc }) => [desc(p.publishedAt)],
-    }),
-    db.query.postMetrics.findMany({
-      orderBy: (m, { desc }) => [desc(m.capturedAt)],
-    }),
-  ]);
+  const publishedPosts = await db.query.posts.findMany({
+    where: and(
+      eq(posts.status, "PUBLISHED"),
+      from ? gte(posts.publishedAt, from) : undefined,
+      to ? lte(posts.publishedAt, to) : undefined,
+    ),
+    orderBy: (p, { desc }) => [desc(p.publishedAt)],
+  });
+
+  if (publishedPosts.length === 0) return [];
+
+  // Antes se leía la tabla ENTERA de métricas (todas las filas históricas de
+  // todos los posts) y encima dos veces por render en el panel. Con la data
+  // creciendo, eso se volvía lento y podía colgar la conexión hasta el 504.
+  // Ahora traemos solo las métricas de los posts de este rango.
+  const allMetrics = await db.query.postMetrics.findMany({
+    where: inArray(postMetrics.postId, publishedPosts.map((p) => p.id)),
+    orderBy: (m, { desc }) => [desc(m.capturedAt)],
+  });
 
   const latest = new Map<number, (typeof allMetrics)[0]>();
   for (const m of allMetrics) {

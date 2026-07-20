@@ -111,14 +111,14 @@ export default async function HomePage() {
     db.query.actionItems.findMany({
       where: eq(actionItems.status, "open"),
       orderBy: (a, { desc }) => [desc(a.createdAt)],
-    }),
-    igAccount ? getAnalyticsRows(from, to) : Promise.resolve([]),
-    igAccount ? getAnalyticsRows(prevFrom, from) : Promise.resolve([]),
+    }).catch(() => []),
+    igAccount ? getAnalyticsRows(from, to).catch(() => []) : Promise.resolve([]),
+    igAccount ? getAnalyticsRows(prevFrom, from).catch(() => []) : Promise.resolve([]),
     adAccount
-      ? db.query.adInsights.findMany({ where: and(gte(adInsights.date, from), lte(adInsights.date, to)) })
+      ? db.query.adInsights.findMany({ where: and(gte(adInsights.date, from), lte(adInsights.date, to)) }).catch(() => [])
       : Promise.resolve([]),
     adAccount
-      ? db.query.adInsights.findMany({ where: and(gte(adInsights.date, prevFrom), lte(adInsights.date, from)) })
+      ? db.query.adInsights.findMany({ where: and(gte(adInsights.date, prevFrom), lte(adInsights.date, from)) }).catch(() => [])
       : Promise.resolve([]),
     adAccount
       ? db.query.sales.findMany({ where: and(gte(sales.occurredAt, from), lte(sales.occurredAt, to)) }).catch(() => [])
