@@ -1,6 +1,6 @@
-import { and, eq, gte, lte } from "drizzle-orm";
-import { db } from "@/db/client";
-import { posts, accountMetrics } from "@/db/schema";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { db, runLimited } from "@/db/client";
+import { posts, accountMetrics, postMetrics } from "@/db/schema";
 import { weeklyReach, bestTimeHeatmap, hookRanking, pillarPerformance, hashtagUsageSummary } from "@/lib/insights";
 import { WeeklyReachChart, FollowersChart, BestTimeHeatmap, HookDiagnosis, PillarLeaderboard, HashtagPerformance } from "@/components/InsightsPanels";
 import { getConnectedAccount } from "@/lib/instagram/account-store";
@@ -60,37 +60,54 @@ export default async function AnalyticsPage({
 
   const summary = await getAccountSummary(account.igUserId, account.accessToken).catch(() => null);
 
-  const [publishedPosts, allMetrics, accountHistory, allPillars, allCaptions] = await Promise.all([
-    db.query.posts.findMany({
-      where: and(
-        eq(posts.status, "PUBLISHED"),
-        fromDate ? gte(posts.publishedAt, fromDate) : undefined,
-        toDate ? lte(posts.publishedAt, toDate) : undefined,
-      ),
-      orderBy: (p, { desc }) => [desc(p.publishedAt)],
-    }),
-    db.query.postMetrics.findMany({
-      orderBy: (m, { desc }) => [desc(m.capturedAt)],
-    }),
-    // .catch: la tabla se crea con la migración; hasta entonces el panel muestra placeholder
-    db.query.accountMetrics
-      .findMany({
+  const [publishedPosts, accountHistory, allPillars, allCaptions, lastMetricEver] = await runLimited([
+    () =>
+      db.query.posts.findMany({
         where: and(
-          fromDate ? gte(accountMetrics.capturedAt, fromDate) : undefined,
-          toDate ? lte(accountMetrics.capturedAt, toDate) : undefined,
+          eq(posts.status, "PUBLISHED"),
+          fromDate ? gte(posts.publishedAt, fromDate) : undefined,
+          toDate ? lte(posts.publishedAt, toDate) : undefined,
         ),
-        orderBy: (a, { asc }) => [asc(a.capturedAt)],
-      })
-      .catch(() => []),
-    db.query.pillars.findMany(),
+        orderBy: (p, { desc: d }) => [d(p.publishedAt)],
+      }),
+    // .catch: la tabla se crea con la migración; hasta entonces el panel muestra placeholder
+    () =>
+      db.query.accountMetrics
+        .findMany({
+          where: and(
+            fromDate ? gte(accountMetrics.capturedAt, fromDate) : undefined,
+            toDate ? lte(accountMetrics.capturedAt, toDate) : undefined,
+          ),
+          orderBy: (a, { asc }) => [asc(a.capturedAt)],
+        })
+        .catch(() => []),
+    () => db.query.pillars.findMany(),
     // Todo el historial (sin filtro de período) — para saber desde cuándo no se usan
     // hashtags, aunque el período elegido no alcance a mostrar el último uso real.
-    db.query.posts.findMany({
-      where: eq(posts.status, "PUBLISHED"),
-      columns: { caption: true, publishedAt: true },
-      orderBy: (p, { desc }) => [desc(p.publishedAt)],
-    }),
-  ]);
+    () =>
+      db.query.posts.findMany({
+        where: eq(posts.status, "PUBLISHED"),
+        columns: { caption: true, publishedAt: true },
+        orderBy: (p, { desc: d }) => [d(p.publishedAt)],
+      }),
+    // Última sincronización global (para el "actualizado hace X" del header),
+    // independiente del rango filtrado — una sola fila, siempre rápida.
+    () => db.query.postMetrics.findFirst({ orderBy: (m, { desc: d }) => [d(m.capturedAt)] }),
+  ] as const);
+
+  // Antes se leía la tabla ENTERA de métricas (todas las filas históricas de
+  // todos los posts, sin filtro) y se armaba el mapa en memoria — con la data
+  // creciendo eso escaneaba y transfería de más en cada carga de la página.
+  // Ahora, con DISTINCT ON, la base devuelve directamente una fila por post
+  // (la última), apoyada en el índice (post_id, captured_at DESC).
+  const allMetrics =
+    publishedPosts.length > 0
+      ? await db
+          .selectDistinctOn([postMetrics.postId])
+          .from(postMetrics)
+          .where(inArray(postMetrics.postId, publishedPosts.map((p) => p.id)))
+          .orderBy(postMetrics.postId, desc(postMetrics.capturedAt))
+      : [];
 
   // Resolvemos el mismo período default que usa /api/analyze (últimos 30 días si no hay filtro)
   // para poder comparar contra periodFrom/periodTo del informe guardado.
@@ -193,8 +210,8 @@ export default async function AnalyticsPage({
   const prevAvgER = prevErValues.length > 0 ? prevErValues.reduce((s, v) => s + v, 0) / prevErValues.length : null;
   const prevSavedShares = prevWith.reduce((s, r) => s + (r.savedCount ?? 0) + (r.sharesCount ?? 0), 0);
 
-  // Última sincronización (los snapshots vienen ordenados por capturedAt desc)
-  const lastSyncAt = allMetrics[0]?.capturedAt?.toISOString() ?? null;
+  // Última sincronización global — no depende del rango filtrado.
+  const lastSyncAt = lastMetricEver?.capturedAt?.toISOString() ?? null;
 
   // Insights agregados
   // Cantidad de semanas del gráfico según el período elegido (4 mín., 12 tope) —

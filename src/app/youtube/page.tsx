@@ -1,4 +1,6 @@
+import { desc, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
+import { youtubeVideoMetrics } from "@/db/schema";
 import { getConnectedYoutubeAccount } from "@/lib/youtube/account-store";
 import { YoutubeVideoForm } from "@/components/YoutubeVideoForm";
 import { YoutubeVideoList, type YoutubeVideoRow } from "@/components/YoutubeVideoList";
@@ -35,12 +37,23 @@ export default async function YoutubePage() {
     );
   }
 
-  const [videos, allMetrics, pillars, channelSnapshots] = await Promise.all([
-    db.query.youtubeVideos.findMany({ orderBy: (v, { desc }) => [desc(v.scheduledAt)] }),
-    db.query.youtubeVideoMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }),
+  const [videos, pillars, channelSnapshots] = await Promise.all([
+    db.query.youtubeVideos.findMany({ orderBy: (v, { desc: d }) => [d(v.scheduledAt)] }),
     db.query.pillars.findMany(),
-    db.query.youtubeChannelMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }).catch(() => []),
+    db.query.youtubeChannelMetrics.findMany({ orderBy: (m, { desc: d }) => [d(m.capturedAt)], limit: 400 }).catch(() => []),
   ]);
+
+  // Antes se leía la tabla ENTERA de métricas (todo el historial de todos los
+  // videos, sin filtro) — con DISTINCT ON se trae solo la última de cada uno,
+  // apoyada en el índice (video_id, captured_at DESC).
+  const allMetrics =
+    videos.length > 0
+      ? await db
+          .selectDistinctOn([youtubeVideoMetrics.videoId])
+          .from(youtubeVideoMetrics)
+          .where(inArray(youtubeVideoMetrics.videoId, videos.map((v) => v.id)))
+          .orderBy(youtubeVideoMetrics.videoId, desc(youtubeVideoMetrics.capturedAt))
+      : [];
 
   const lastChannelSnapshot = channelSnapshots[0] ?? null;
   // Snapshot más cercano a "hace una semana" (mínimo 5 días atrás) para los

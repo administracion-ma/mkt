@@ -1,6 +1,6 @@
-import { and, eq, gte, lte } from "drizzle-orm";
-import { db } from "@/db/client";
-import { adInsights, adCreativeInsights, sales, youtubeVideos } from "@/db/schema";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { db, runLimited } from "@/db/client";
+import { adInsights, adCreativeInsights, sales, youtubeVideos, youtubeVideoMetrics } from "@/db/schema";
 import { median } from "@/lib/benchmark";
 import { getConnectedAdAccount } from "@/lib/ads/account-store";
 import {
@@ -64,41 +64,61 @@ export default async function AdsPage({
       ? lastAdsReportAny
       : null;
 
-  const [campaigns, insightRows, prevInsightRows, prevSales, adList, adInsightRows, allAdInsightRows, usdRate, allPillars, organicRows, periodSales] = await Promise.all([
-    db.query.adCampaigns.findMany(),
-    db.query.adInsights.findMany({
-      where: and(gte(adInsights.date, fromDate), lte(adInsights.date, toDate)),
-      orderBy: (i, { asc }) => [asc(i.date)],
-    }),
-    db.query.adInsights.findMany({
-      where: and(gte(adInsights.date, prevWindowFrom), lte(adInsights.date, fromDate)),
-    }),
-    db.query.sales.findMany({
-      where: and(gte(sales.occurredAt, prevWindowFrom), lte(sales.occurredAt, fromDate)),
-    }).catch(() => []),
-    db.query.ads.findMany(),
-    db.query.adCreativeInsights.findMany({
-      where: and(gte(adCreativeInsights.date, fromDate), lte(adCreativeInsights.date, toDate)),
-      orderBy: (i, { asc }) => [asc(i.date)],
-    }),
-    db.query.adCreativeInsights.findMany({
-      where: gte(adCreativeInsights.date, monthlyWindowStart),
-      orderBy: (i, { asc }) => [asc(i.date)],
-    }),
-    getUsdRate(account.currency),
-    db.query.pillars.findMany(),
-    getAnalyticsRows(fromDate, toDate),
-    db.query.sales.findMany({
-      where: and(gte(sales.occurredAt, fromDate), lte(sales.occurredAt, toDate)),
-    }).catch(() => []),
-  ]);
+  // runLimited (no Promise.all sin freno): con 11+ consultas concurrentes
+  // sobre el mismo pool, algunas quedaban colgadas esperando su turno aunque
+  // cada una sola es rapidísima — confirmado en /api/health/* sobre el panel
+  // de inicio, mismo patrón acá.
+  const [campaigns, insightRows, prevInsightRows, prevSales, adList, adInsightRows, allAdInsightRows, usdRate, allPillars, organicRows, periodSales, ytVideos] = await runLimited([
+    () => db.query.adCampaigns.findMany(),
+    () =>
+      db.query.adInsights.findMany({
+        where: and(gte(adInsights.date, fromDate), lte(adInsights.date, toDate)),
+        orderBy: (i, { asc }) => [asc(i.date)],
+      }),
+    () =>
+      db.query.adInsights.findMany({
+        where: and(gte(adInsights.date, prevWindowFrom), lte(adInsights.date, fromDate)),
+      }),
+    () =>
+      db.query.sales.findMany({
+        where: and(gte(sales.occurredAt, prevWindowFrom), lte(sales.occurredAt, fromDate)),
+      }).catch(() => []),
+    () => db.query.ads.findMany(),
+    () =>
+      db.query.adCreativeInsights.findMany({
+        where: and(gte(adCreativeInsights.date, fromDate), lte(adCreativeInsights.date, toDate)),
+        orderBy: (i, { asc }) => [asc(i.date)],
+      }),
+    () =>
+      db.query.adCreativeInsights.findMany({
+        where: gte(adCreativeInsights.date, monthlyWindowStart),
+        orderBy: (i, { asc }) => [asc(i.date)],
+      }),
+    () => getUsdRate(account.currency),
+    () => db.query.pillars.findMany(),
+    () => getAnalyticsRows(fromDate, toDate),
+    () =>
+      db.query.sales.findMany({
+        where: and(gte(sales.occurredAt, fromDate), lte(sales.occurredAt, toDate)),
+      }).catch(() => []),
+    // .catch: hasta que se corra la migración de YouTube esta tabla puede no existir.
+    () => db.query.youtubeVideos.findMany({ where: eq(youtubeVideos.status, "PUBLISHED") }).catch(() => []),
+  ] as const);
 
-  // YouTube por pilar — para la vista unificada. .catch: hasta que se corra
-  // la migración de YouTube estas tablas pueden no existir.
-  const [ytVideos, ytMetrics] = await Promise.all([
-    db.query.youtubeVideos.findMany({ where: eq(youtubeVideos.status, "PUBLISHED") }).catch(() => []),
-    db.query.youtubeVideoMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }).catch(() => []),
-  ]);
+  // Antes se leía la tabla ENTERA de youtube_video_metrics (todo el
+  // historial de todos los videos, sin filtro) — mismo problema que tenía
+  // post_metrics en el panel de inicio. Ahora, con DISTINCT ON, solo se trae
+  // la última métrica de cada video de esta cuenta, apoyada en el índice
+  // (video_id, captured_at DESC).
+  const ytMetrics =
+    ytVideos.length > 0
+      ? await db
+          .selectDistinctOn([youtubeVideoMetrics.videoId])
+          .from(youtubeVideoMetrics)
+          .where(inArray(youtubeVideoMetrics.videoId, ytVideos.map((v) => v.id)))
+          .orderBy(youtubeVideoMetrics.videoId, desc(youtubeVideoMetrics.capturedAt))
+          .catch(() => [])
+      : [];
   const latestYt = new Map<number, (typeof ytMetrics)[0]>();
   for (const m of ytMetrics) {
     if (!latestYt.has(m.videoId)) latestYt.set(m.videoId, m);

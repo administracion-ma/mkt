@@ -24,13 +24,19 @@ function getClient() {
     //  - idle_timeout default = 0 = las conexiones NO se cierran nunca. Cada
     //    instancia serverless de Vercel las va acumulando y agota el límite de
     //    Supabase. Con 20s se liberan y dejan lugar a otras instancias.
-    //  - max: tope de conexiones por instancia. postgres-js hace pipelining
-    //    sobre cada conexión, así que 5 alcanzan de sobra para las páginas que
-    //    lanzan varias queries en paralelo, sin arriesgar agotar Supabase.
+    //  - max: tope de conexiones por instancia. Confirmado con diagnóstico en
+    //    producción: con max:5 y una página disparando ~13 queries a la vez
+    //    con Promise.all, un par de ellas quedaban colgadas 12s+ esperando
+    //    conexión libre (aunque cada query sola tardaba <500ms) — el pipelining
+    //    de postgres-js no compensaba bien contra el pooler de Supabase bajo
+    //    esa concurrencia. El pooler en modo transacción está pensado para
+    //    aguantar bastante más que esto, así que subir el tope de este lado es
+    //    seguro. Combinar con runLimited() abajo para no volver a mandar
+    //    ráfagas grandes sin control.
     // prepare:false es obligatorio para el pooler en modo transacción.
     global.__dbClient = postgres(env.databaseUrl, {
       prepare: false,
-      max: 5,
+      max: 15,
       idle_timeout: 20,
       connect_timeout: 10,
     });
@@ -53,4 +59,28 @@ export async function withTimeout<T, F = T>(promise: Promise<T>, fallback: F, ms
   } catch {
     return fallback;
   }
+}
+
+// Corre varias consultas con como máximo `limit` en simultáneo, en vez de un
+// Promise.all sin freno. Páginas como el panel de inicio disparaban ~13
+// queries a la vez sobre el mismo pool y algunas quedaban colgadas 12s+
+// esperando su turno (visto en producción con /api/health/*), aun con más
+// conexiones disponibles. Corriendo de a `limit` por tanda se evita esa
+// ráfaga. Devuelve los resultados en el mismo orden que las tareas de entrada
+// (tipado como tupla, igual que Promise.all, para no perder el tipo de cada
+// consulta al desestructurar).
+export async function runLimited<T extends readonly (() => Promise<unknown>)[]>(
+  tasks: T,
+  limit = 6,
+): Promise<{ [K in keyof T]: Awaited<ReturnType<T[K]>> }> {
+  const results: unknown[] = new Array(tasks.length);
+  let next = 0;
+  async function worker() {
+    while (next < tasks.length) {
+      const i = next++;
+      results[i] = await tasks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  return results as { [K in keyof T]: Awaited<ReturnType<T[K]>> };
 }

@@ -1,4 +1,6 @@
+import { desc, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
+import { tiktokVideoMetrics } from "@/db/schema";
 import { getConnectedTiktokAccount } from "@/lib/tiktok/account-store";
 import { TiktokVideoForm } from "@/components/TiktokVideoForm";
 import { TiktokVideoList, type TiktokVideoRow } from "@/components/TiktokVideoList";
@@ -33,12 +35,23 @@ export default async function TiktokPage() {
     );
   }
 
-  const [videos, allMetrics, pillars, accountSnapshots] = await Promise.all([
-    db.query.tiktokVideos.findMany({ orderBy: (v, { desc }) => [desc(v.scheduledAt)] }),
-    db.query.tiktokVideoMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }),
+  const [videos, pillars, accountSnapshots] = await Promise.all([
+    db.query.tiktokVideos.findMany({ orderBy: (v, { desc: d }) => [d(v.scheduledAt)] }),
     db.query.pillars.findMany(),
-    db.query.tiktokAccountMetrics.findMany({ orderBy: (m, { desc }) => [desc(m.capturedAt)] }).catch(() => []),
+    db.query.tiktokAccountMetrics.findMany({ orderBy: (m, { desc: d }) => [d(m.capturedAt)], limit: 400 }).catch(() => []),
   ]);
+
+  // Antes se leía la tabla ENTERA de métricas — con DISTINCT ON se trae solo
+  // la última de cada video, apoyada en el índice (video_id, captured_at DESC).
+  const allMetrics =
+    videos.length > 0
+      ? await db
+          .selectDistinctOn([tiktokVideoMetrics.videoId])
+          .from(tiktokVideoMetrics)
+          .where(inArray(tiktokVideoMetrics.videoId, videos.map((v) => v.id)))
+          .orderBy(tiktokVideoMetrics.videoId, desc(tiktokVideoMetrics.capturedAt))
+          .catch(() => [])
+      : [];
 
   const lastSnapshot = accountSnapshots[0] ?? null;
   const nowMs = new Date().getTime();
