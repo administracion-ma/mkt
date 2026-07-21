@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { band, bm, BM_COLOR, type BmLevel, type MetricBand } from "@/lib/benchmark";
 import { YoutubePillarSelect } from "@/components/YoutubePillarSelect";
 
@@ -145,6 +148,10 @@ function Section({ title, note, rows, pillars }: { title: string; note?: string;
 }
 
 export function YoutubeVideoGrid({ rows, pillars }: { rows: YoutubeGridRow[]; pillars: PillarOption[] }) {
+  // En mobile la grilla cae a una sola columna: sin este filtro había que
+  // scrollear todos los Shorts antes de llegar a los videos largos.
+  const [filter, setFilter] = useState<"all" | "short" | "long">("all");
+
   if (rows.length === 0) {
     return (
       <div className="empty">
@@ -159,14 +166,27 @@ export function YoutubeVideoGrid({ rows, pillars }: { rows: YoutubeGridRow[]; pi
 
   return (
     <>
-      <p style={{ fontSize: "0.72rem", color: "var(--text-tertiary)", margin: "0 0 1.25rem" }}>
+      <p style={{ fontSize: "0.72rem", color: "var(--text-tertiary)", margin: "0 0 1rem" }}>
         Semáforo: <span style={{ color: BM_COLOR.top }}>verde</span> = tercio superior de tu canal ·{" "}
         <span style={{ color: BM_COLOR.low }}>rojo</span> = tercio inferior · gris = típico. Shorts y videos largos se
         comparan por separado; likes y comentarios como tasa sobre vistas. Retención y watch time pueden tardar 24-48h
         en aparecer para videos recientes (retraso de YouTube, no nuestro).
       </p>
-      <Section title="▯ Shorts (verticales)" rows={shorts} pillars={pillars} />
-      <Section title="▭ Videos largos (horizontales)" rows={longs} pillars={pillars} />
+
+      <div className="view-toggle" style={{ marginBottom: "1.25rem" }}>
+        <button className={`view-toggle-btn${filter === "all" ? " active" : ""}`} onClick={() => setFilter("all")}>
+          Todos ({rows.length})
+        </button>
+        <button className={`view-toggle-btn${filter === "short" ? " active" : ""}`} onClick={() => setFilter("short")}>
+          ▯ Shorts ({shorts.length})
+        </button>
+        <button className={`view-toggle-btn${filter === "long" ? " active" : ""}`} onClick={() => setFilter("long")}>
+          ▭ Videos largos ({longs.length})
+        </button>
+      </div>
+
+      {filter !== "long" && <Section title="▯ Shorts (verticales)" rows={shorts} pillars={pillars} />}
+      {filter !== "short" && <Section title="▭ Videos largos (horizontales)" rows={longs} pillars={pillars} />}
     </>
   );
 }
