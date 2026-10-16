@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { kommoLeads } from "@/db/schema";
 import { getLeadsCreatedBetween, type KommoLeadRaw } from "@/lib/kommo/api";
@@ -34,19 +35,37 @@ export async function syncKommoLeads(days = 400): Promise<{ synced: number }> {
   const to = new Date();
   const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
   const raw = await getLeadsCreatedBetween(from, to);
+  if (raw.length === 0) return { synced: 0 };
 
+  // Insertar de a 1 por lead (un viaje a la base cada uno) escalaba mal: con
+  // varios cientos de leads en 13 meses, la suma de round-trips superaba el
+  // tiempo que el navegador esperaba la respuesta y la página mostraba un
+  // error genérico de red. Ahora se inserta en tandas de hasta 300 leads en
+  // una sola consulta (INSERT ... ON CONFLICT DO UPDATE con `excluded`, el
+  // valor que intentaba insertarse, como fuente del UPDATE).
+  const CHUNK = 300;
   let synced = 0;
-  // De a 1 por vez pero sin esperar red entre cada uno más que el propio
-  // insert: con cientos de leads esto es rápido igual, y evita problemas de
-  // concurrencia contra el pool de conexiones (mismo criterio que el resto
-  // de la app después del incidente de los 504 por contención).
-  for (const l of raw) {
-    const values = mapLead(l);
+  for (let i = 0; i < raw.length; i += CHUNK) {
+    const chunk = raw.slice(i, i + CHUNK).map(mapLead);
     await db
       .insert(kommoLeads)
-      .values(values)
-      .onConflictDoUpdate({ target: kommoLeads.kommoLeadId, set: values });
-    synced++;
+      .values(chunk)
+      .onConflictDoUpdate({
+        target: kommoLeads.kommoLeadId,
+        set: {
+          name: sql`excluded.name`,
+          price: sql`excluded.price`,
+          pipelineId: sql`excluded.pipeline_id`,
+          statusId: sql`excluded.status_id`,
+          responsibleUserId: sql`excluded.responsible_user_id`,
+          closedAt: sql`excluded.closed_at`,
+          kommoCreatedAt: sql`excluded.kommo_created_at`,
+          kommoUpdatedAt: sql`excluded.kommo_updated_at`,
+          customFields: sql`excluded.custom_fields`,
+          syncedAt: sql`excluded.synced_at`,
+        },
+      });
+    synced += chunk.length;
   }
 
   return { synced };
