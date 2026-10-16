@@ -2,7 +2,7 @@ import { and, gte, lt } from "drizzle-orm";
 import { db } from "@/db/client";
 import { posts } from "@/db/schema";
 import { createPost, deletePost, publishPostNow } from "@/lib/posts/actions";
-import { CalendarGrid } from "@/components/calendar/CalendarGrid";
+import { CalendarView } from "@/components/calendar/CalendarView";
 import type { CalendarPost } from "@/components/calendar/types";
 import { getAnalyticsRows } from "@/lib/analytics-data";
 import { bestTimeHeatmap, DAY_LABELS, SLOT_LABELS } from "@/lib/insights";
@@ -12,13 +12,15 @@ export const dynamic = "force-dynamic";
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; view?: string }>;
 }) {
-  const { month: monthParam } = await searchParams;
+  const { month: monthParam, view: viewParam } = await searchParams;
   const now = new Date();
   const [yearStr, monthStr] = (monthParam ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`).split("-");
   const year = Number(yearStr);
   const month = Number(monthStr) - 1; // 0-indexed
+  const monthStart = new Date(year, month, 1);
+  const nextMonthStart = new Date(year, month + 1, 1);
 
   // Traemos con un margen de una semana antes/después para cubrir los días
   // de los meses adyacentes que se ven en la grilla.
@@ -63,6 +65,13 @@ export default async function CalendarPage({
     rawFootageUrl: p.rawFootageUrl,
   }));
 
+  // Acotado al mes exacto (sin el relleno de días adyacentes que necesita la
+  // Grilla) — lo que usa la vista Briefs.
+  const strictMonthPosts = calendarPosts.filter((p) => {
+    const t = new Date(p.scheduledAt).getTime();
+    return t >= monthStart.getTime() && t < nextMonthStart.getTime();
+  });
+
   return (
     <main className="page">
       <div className="page-header">
@@ -71,16 +80,18 @@ export default async function CalendarPage({
       </div>
 
       <div className="card">
-        <CalendarGrid
+        <CalendarView
           year={year}
           month={month}
-          posts={calendarPosts}
+          gridPosts={calendarPosts}
+          monthPosts={strictMonthPosts}
           pillars={allPillars}
           editors={allEditors}
           bestTime={bestTime}
           createPost={createPost}
           deletePost={deletePost}
           publishPostNow={publishPostNow}
+          initialView={viewParam === "briefs" ? "briefs" : "grid"}
         />
       </div>
     </main>

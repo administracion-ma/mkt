@@ -56,6 +56,15 @@ export const PRODUCTION_STATUS_LABEL: Record<string, string> = {
   SUBIDO: "Subido",
 };
 
+export const PRODUCTION_STATUS_COLOR: Record<string, string> = {
+  SIN_INICIAR: "#888",
+  SIN_GRABAR: "#EF4444",
+  PROCESO: "#EAB308",
+  EDITADO: "#60A5FA",
+  A_REVISAR: "#A78BFA",
+  SUBIDO: "#22C55E",
+};
+
 export const CHANNEL_LABEL: Record<string, string> = {
   SOLO_TIKTOK: "Solo TikTok",
   VERTICAL: "Vertical",
