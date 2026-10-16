@@ -5,6 +5,7 @@ import { runYoutubeSync, runYoutubeImport } from "@/lib/youtube/actions";
 import { getConnectedYoutubeAccount } from "@/lib/youtube/account-store";
 import { runTiktokSync } from "@/lib/tiktok/actions";
 import { getConnectedTiktokAccount } from "@/lib/tiktok/account-store";
+import { runKommoSync } from "@/lib/kommo/actions";
 import { ActionCard } from "@/components/admin/ActionCard";
 import { ConnectAdAccountForm } from "@/components/ConnectAdAccountForm";
 
@@ -105,6 +106,13 @@ export default async function AdminPage() {
           action={runTiktokSync}
         />
       )}
+
+      <ActionCard
+        title="Sincronizar Kommo ahora"
+        description="Trae los leads del CRM (últimos ~13 meses) con sus campos personalizados, para el dashboard de /kommo. Necesita KOMMO_SUBDOMAIN y KOMMO_ACCESS_TOKEN cargados en Vercel — si no están, el botón va a mostrar el error exacto. Corre automáticamente 1 vez por día."
+        buttonLabel="Sincronizar Kommo"
+        action={runKommoSync}
+      />
     </main>
   );
 }

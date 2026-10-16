@@ -384,3 +384,25 @@ export const tiktokAccountMetrics = pgTable("tiktok_account_metrics", {
   likesCount: integer("likes_count"), // total de likes acumulados de la cuenta
   videoCount: integer("video_count"),
 });
+
+// Leads de Kommo (CRM) — se sincronizan vía API con token de larga duración
+// (sin OAuth, es una integración privada). customFields guarda el array
+// crudo que manda Kommo (fieldId, fieldName, tipo, valores) para poder armar
+// el desglose por % de CUALQUIER campo de selección sin tener que migrar el
+// schema cada vez que agreguen uno nuevo en Kommo.
+export const kommoLeads = pgTable("kommo_leads", {
+  id: serial("id").primaryKey(),
+  kommoLeadId: text("kommo_lead_id").notNull().unique(),
+  name: text("name"),
+  price: doublePrecision("price"), // en la moneda de la cuenta de Kommo
+  pipelineId: text("pipeline_id"),
+  statusId: text("status_id"), // etapa actual dentro del pipeline
+  responsibleUserId: text("responsible_user_id"),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  kommoCreatedAt: timestamp("kommo_created_at", { withTimezone: true }).notNull(),
+  kommoUpdatedAt: timestamp("kommo_updated_at", { withTimezone: true }),
+  customFields: jsonb("custom_fields").$type<
+    { fieldId: number; fieldName: string; fieldType: string; values: { value: string | number | null; enumId: number | null }[] }[]
+  >(),
+  syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+});

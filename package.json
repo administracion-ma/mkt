@@ -20,7 +20,8 @@
     "publish:youtube": "tsx scripts/publish-scheduled-youtube.ts",
     "sync:youtube": "tsx scripts/sync-youtube.ts",
     "publish:tiktok": "tsx scripts/publish-scheduled-tiktok.ts",
-    "sync:tiktok": "tsx scripts/sync-tiktok.ts"
+    "sync:tiktok": "tsx scripts/sync-tiktok.ts",
+    "sync:kommo": "tsx scripts/sync-kommo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",

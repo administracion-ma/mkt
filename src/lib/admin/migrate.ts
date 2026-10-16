@@ -382,4 +382,23 @@ export async function applyMigration(): Promise<void> {
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_posts_status_published ON posts (status, published_at DESC);`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_posts_scheduled ON posts (scheduled_at);`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_action_items_status ON action_items (status);`);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS kommo_leads (
+      id serial PRIMARY KEY,
+      kommo_lead_id text NOT NULL UNIQUE,
+      name text,
+      price double precision,
+      pipeline_id text,
+      status_id text,
+      responsible_user_id text,
+      closed_at timestamptz,
+      kommo_created_at timestamptz NOT NULL,
+      kommo_updated_at timestamptz,
+      custom_fields jsonb,
+      synced_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_kommo_leads_created ON kommo_leads (kommo_created_at DESC);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_kommo_leads_status ON kommo_leads (status_id);`);
 }

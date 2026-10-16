@@ -61,4 +61,10 @@ export const env = {
   get notifyEmailTo() {
     return process.env.NOTIFY_EMAIL_TO || null;
   },
+  get kommoSubdomain() {
+    return required("KOMMO_SUBDOMAIN");
+  },
+  get kommoAccessToken() {
+    return required("KOMMO_ACCESS_TOKEN");
+  },
 };

@@ -1,0 +1,26 @@
+name: Sincronizar Kommo
+
+on:
+  schedule:
+    # 1 vez por día — igual que YouTube/TikTok, los leads no cambian tan
+    # rápido como para necesitar más frecuencia.
+    - cron: "0 12 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - run: npm run sync:kommo
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          KOMMO_SUBDOMAIN: ${{ secrets.KOMMO_SUBDOMAIN }}
+          KOMMO_ACCESS_TOKEN: ${{ secrets.KOMMO_ACCESS_TOKEN }}
