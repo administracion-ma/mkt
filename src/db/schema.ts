@@ -399,6 +399,7 @@ export const kommoLeads = pgTable("kommo_leads", {
   statusId: text("status_id"), // etapa actual dentro del pipeline
   responsibleUserId: text("responsible_user_id"),
   closedAt: timestamp("closed_at", { withTimezone: true }),
+  lossReasonId: text("loss_reason_id"), // solo presente en leads perdidos
   kommoCreatedAt: timestamp("kommo_created_at", { withTimezone: true }).notNull(),
   kommoUpdatedAt: timestamp("kommo_updated_at", { withTimezone: true }),
   customFields: jsonb("custom_fields").$type<

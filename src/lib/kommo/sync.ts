@@ -16,6 +16,7 @@ function mapLead(l: KommoLeadRaw) {
     statusId: l.status_id != null ? String(l.status_id) : null,
     responsibleUserId: l.responsible_user_id != null ? String(l.responsible_user_id) : null,
     closedAt: toDate(l.closed_at),
+    lossReasonId: l.loss_reason_id != null ? String(l.loss_reason_id) : null,
     kommoCreatedAt: toDate(l.created_at) ?? new Date(),
     kommoUpdatedAt: toDate(l.updated_at),
     customFields: (l.custom_fields_values ?? []).map((f) => ({
@@ -59,6 +60,7 @@ export async function syncKommoLeads(days = 400): Promise<{ synced: number }> {
           statusId: sql`excluded.status_id`,
           responsibleUserId: sql`excluded.responsible_user_id`,
           closedAt: sql`excluded.closed_at`,
+          lossReasonId: sql`excluded.loss_reason_id`,
           kommoCreatedAt: sql`excluded.kommo_created_at`,
           kommoUpdatedAt: sql`excluded.kommo_updated_at`,
           customFields: sql`excluded.custom_fields`,

@@ -401,4 +401,5 @@ export async function applyMigration(): Promise<void> {
   `);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_kommo_leads_created ON kommo_leads (kommo_created_at DESC);`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_kommo_leads_status ON kommo_leads (status_id);`);
+  await db.execute(sql`ALTER TABLE kommo_leads ADD COLUMN IF NOT EXISTS loss_reason_id text;`);
 }

@@ -80,6 +80,7 @@ export type KommoLeadRaw = {
   created_at: number | null; // unix seconds
   updated_at: number | null;
   closed_at: number | null;
+  loss_reason_id: number | null; // solo presente en leads perdidos
   custom_fields_values: Array<{
     field_id: number;
     field_name: string;
@@ -109,4 +110,33 @@ export async function getLeadsCreatedBetween(from: Date, to: Date): Promise<Komm
     page++;
   }
   return out;
+}
+
+export type KommoUser = { id: number; name: string };
+
+// Para resolver "responsible_user_id" → nombre en el ranking de vendedores.
+export async function getUsers(): Promise<KommoUser[]> {
+  const out: KommoUser[] = [];
+  let page = 1;
+  while (page <= 10) {
+    const body = (await kommoGet(`/users?page=${page}&limit=250`)) as {
+      _embedded?: { users?: Array<{ id: number; name: string }> };
+    } | null;
+    const users = body?._embedded?.users ?? [];
+    if (users.length === 0) break;
+    out.push(...users.map((u) => ({ id: u.id, name: u.name })));
+    if (users.length < 250) break;
+    page++;
+  }
+  return out;
+}
+
+export type KommoLossReason = { id: number; name: string };
+
+// Para resolver "loss_reason_id" → texto en "Motivos de pérdida".
+export async function getLossReasons(): Promise<KommoLossReason[]> {
+  const body = (await kommoGet("/leads/loss_reasons")) as {
+    _embedded?: { loss_reasons?: Array<{ id: number; name: string }> };
+  } | null;
+  return (body?._embedded?.loss_reasons ?? []).map((r) => ({ id: r.id, name: r.name }));
 }
