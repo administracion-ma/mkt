@@ -34,9 +34,6 @@ export const env = {
   get anthropicApiKey() {
     return required("ANTHROPIC_API_KEY");
   },
-  get appPassword() {
-    return required("APP_PASSWORD");
-  },
   get youtubeClientId() {
     return required("YOUTUBE_CLIENT_ID");
   },
