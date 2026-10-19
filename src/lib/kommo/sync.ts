@@ -1,13 +1,16 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { kommoLeads } from "@/db/schema";
-import { getLeadsCreatedBetween, type KommoLeadRaw } from "@/lib/kommo/api";
+import { getChannelMaps, getLeadsCreatedBetween, type KommoChannel, type KommoLeadRaw } from "@/lib/kommo/api";
 
 function toDate(unix: number | null): Date | null {
   return unix != null ? new Date(unix * 1000) : null;
 }
 
-function mapLead(l: KommoLeadRaw) {
+type ChannelMaps = { byLead: Map<string, KommoChannel>; bySource: Map<string, KommoChannel> };
+
+function mapLead(l: KommoLeadRaw, channels: ChannelMaps) {
+  const sourceId = l.source_id != null ? String(l.source_id) : null;
   return {
     kommoLeadId: String(l.id),
     name: l.name,
@@ -17,6 +20,8 @@ function mapLead(l: KommoLeadRaw) {
     responsibleUserId: l.responsible_user_id != null ? String(l.responsible_user_id) : null,
     closedAt: toDate(l.closed_at),
     lossReasonId: l.loss_reason_id != null ? String(l.loss_reason_id) : null,
+    sourceId,
+    channel: channels.byLead.get(String(l.id)) ?? (sourceId ? channels.bySource.get(sourceId) : undefined) ?? null,
     kommoCreatedAt: toDate(l.created_at) ?? new Date(),
     kommoUpdatedAt: toDate(l.updated_at),
     customFields: (l.custom_fields_values ?? []).map((f) => ({
@@ -32,10 +37,10 @@ function mapLead(l: KommoLeadRaw) {
 // Sincroniza los leads creados en los últimos `days` (default ~13 meses, para
 // tener de sobra para comparar año contra año). Upsert por kommoLeadId: un
 // lead que cambió de etapa desde el último sync se actualiza, no duplica.
-export async function syncKommoLeads(days = 400, maxPages?: number): Promise<{ synced: number }> {
+export async function syncKommoLeads(days = 400, maxPages?: number, talkPages?: number): Promise<{ synced: number }> {
   const to = new Date();
   const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
-  const raw = await getLeadsCreatedBetween(from, to, maxPages);
+  const [raw, channels] = await Promise.all([getLeadsCreatedBetween(from, to, maxPages), getChannelMaps(talkPages)]);
   if (raw.length === 0) return { synced: 0 };
 
   // Insertar de a 1 por lead (un viaje a la base cada uno) escalaba mal: con
@@ -47,7 +52,7 @@ export async function syncKommoLeads(days = 400, maxPages?: number): Promise<{ s
   const CHUNK = 300;
   let synced = 0;
   for (let i = 0; i < raw.length; i += CHUNK) {
-    const chunk = raw.slice(i, i + CHUNK).map(mapLead);
+    const chunk = raw.slice(i, i + CHUNK).map((l) => mapLead(l, channels));
     await db
       .insert(kommoLeads)
       .values(chunk)
@@ -61,6 +66,8 @@ export async function syncKommoLeads(days = 400, maxPages?: number): Promise<{ s
           responsibleUserId: sql`excluded.responsible_user_id`,
           closedAt: sql`excluded.closed_at`,
           lossReasonId: sql`excluded.loss_reason_id`,
+          sourceId: sql`excluded.source_id`,
+          channel: sql`excluded.channel`,
           kommoCreatedAt: sql`excluded.kommo_created_at`,
           kommoUpdatedAt: sql`excluded.kommo_updated_at`,
           customFields: sql`excluded.custom_fields`,

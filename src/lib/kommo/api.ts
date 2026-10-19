@@ -81,6 +81,7 @@ export type KommoLeadRaw = {
   updated_at: number | null;
   closed_at: number | null;
   loss_reason_id: number | null; // solo presente en leads perdidos
+  source_id?: number | null; // con `with=source_id` — de qué fuente (canal) entró
   custom_fields_values: Array<{
     field_id: number;
     field_name: string;
@@ -101,7 +102,7 @@ export async function getLeadsCreatedBetween(from: Date, to: Date, maxPages = 40
   let page = 1;
   while (page <= maxPages) {
     const body = (await kommoGet(
-      `/leads?filter[created_at][from]=${fromUnix}&filter[created_at][to]=${toUnix}&page=${page}&limit=250&order[created_at]=desc`,
+      `/leads?filter[created_at][from]=${fromUnix}&filter[created_at][to]=${toUnix}&page=${page}&limit=250&order[created_at]=desc&with=source_id`,
     )) as { _embedded?: { leads?: KommoLeadRaw[] } } | null;
     const leads = body?._embedded?.leads ?? [];
     if (leads.length === 0) break;
@@ -111,6 +112,43 @@ export async function getLeadsCreatedBetween(from: Date, to: Date, maxPages = 40
   }
   if (page > maxPages) console.warn(`Kommo: se alcanzó el tope de ${maxPages} páginas — quedaron afuera los leads más viejos del rango.`);
   return out;
+}
+
+export type KommoChannel = "whatsapp" | "instagram" | "facebook" | "otro";
+
+// `origin` de un chat de Kommo → canal legible. waba = WhatsApp Business API,
+// com.amocrm.amocrmwa = WhatsApp Lite, instagram_business = DMs de IG.
+export function channelFromOrigin(origin: string | null | undefined): KommoChannel | null {
+  if (!origin) return null;
+  const o = origin.toLowerCase();
+  if (o.includes("waba") || o.includes("whatsapp") || o.endsWith("wa")) return "whatsapp";
+  if (o.includes("instagram")) return "instagram";
+  if (o.includes("facebook") || o.includes("messenger")) return "facebook";
+  return "otro";
+}
+
+// Canal de entrada de cada lead. Kommo no lo trae en el lead en sí, pero
+// cada chat (/talks) tiene `origin` (whatsapp/instagram), el lead al que
+// pertenece y el `source_id` de la fuente. Se arman dos mapas: por lead
+// (exacto) y por fuente (para leads cuyo chat no entró en las páginas
+// leídas — cada fuente es siempre del mismo canal).
+export async function getChannelMaps(maxPages = 40): Promise<{ byLead: Map<string, KommoChannel>; bySource: Map<string, KommoChannel> }> {
+  const byLead = new Map<string, KommoChannel>();
+  const bySource = new Map<string, KommoChannel>();
+  for (let page = 1; page <= maxPages; page++) {
+    const body = (await kommoGet(`/talks?page=${page}&limit=250`)) as {
+      _embedded?: { talks?: Array<{ origin?: string; source_id?: number; entity_id?: number; entity_type?: string }> };
+    } | null;
+    const talks = body?._embedded?.talks ?? [];
+    for (const t of talks) {
+      const channel = channelFromOrigin(t.origin);
+      if (!channel) continue;
+      if (t.source_id != null) bySource.set(String(t.source_id), channel);
+      if (t.entity_type === "lead" && t.entity_id != null) byLead.set(String(t.entity_id), channel);
+    }
+    if (talks.length < 250) break;
+  }
+  return { byLead, bySource };
 }
 
 export type KommoUser = { id: number; name: string };

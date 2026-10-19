@@ -9,9 +9,16 @@ import {
   concretionFunnel,
   salesLeaderboard,
   lossReasonsBreakdown,
+  channelBreakdown,
+  funnelByChannel,
+  interestBreakdown,
+  capitalBreakdown,
+  timeToWin,
+  type AnswerBreakdown,
   WON_STATUS_ID,
   LOST_STATUS_ID,
 } from "@/lib/kommo/insights";
+import Link from "next/link";
 import { PeriodFilter } from "@/components/PeriodFilter";
 import { StatDelta } from "@/components/StatDelta";
 import { StatLabel } from "@/components/StatLabel";
@@ -32,14 +39,49 @@ function Bar({ pct, color }: { pct: number; color: string }) {
   );
 }
 
+function fmtDays(d: number | null): string {
+  if (d == null) return "—";
+  if (d < 1) return `${Math.round(d * 24)} h`;
+  return `${d.toFixed(d < 10 ? 1 : 0)} días`;
+}
+
+function AnswerCard({ b, colors }: { b: AnswerBreakdown; colors: string[] }) {
+  return (
+    <div className="card">
+      <h3 style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.15rem" }}>{b.title}</h3>
+      <p style={{ fontSize: "0.68rem", color: "var(--text-tertiary)", margin: "0 0 0.9rem" }}>
+        {b.answeredCount} de {b.totalCount} leads respondieron
+        {b.totalCount > 0 && ` (${((b.answeredCount / b.totalCount) * 100).toFixed(0)}%)`}. El % es sobre los que respondieron.
+      </p>
+      {b.rows.length === 0 ? (
+        <p style={{ fontSize: "0.75rem", color: "var(--text-tertiary)", margin: 0 }}>Nadie respondió en este período.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
+          {b.rows.map((row, i) => (
+            <div key={row.value}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.74rem", marginBottom: "0.15rem" }}>
+                <span>{row.value}</span>
+                <span style={{ fontWeight: 600 }}>{row.count} <span style={{ color: "var(--text-tertiary)", fontWeight: 500 }}>({row.pct.toFixed(0)}%)</span></span>
+              </div>
+              <Bar pct={row.pct} color={colors[i % colors.length]} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ANSWER_COLORS = ["#f7931a", "#fbbf24", "#60a5fa", "#a78bfa", "#2dd4bf", "#888"];
+
 const LOSS_COLORS = ["#ef4444", "#f97316", "#eab308", "#a78bfa", "#60a5fa", "#2dd4bf", "#f472b6", "#888"];
 
 export default async function KommoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; pipeline?: string }>;
 }) {
-  const { from, to } = await searchParams;
+  const { from, to, pipeline: pipelineParam } = await searchParams;
   const toDate = to ? new Date(to + "T23:59:59") : new Date();
   const fromDate = from ? new Date(from + "T00:00:00") : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
   const prevWindowFrom = new Date(fromDate.getTime() - (toDate.getTime() - fromDate.getTime()));
@@ -90,19 +132,42 @@ export default async function KommoPage({
     // Todo el histórico — para "estado general del pipeline", que es la foto
     // completa, no acotada al período elegido arriba. Solo conteos por etapa.
     db
-      .select({ statusId: kommoLeads.statusId, count: sql<number>`count(*)::int` })
+      .select({ pipelineId: kommoLeads.pipelineId, statusId: kommoLeads.statusId, count: sql<number>`count(*)::int` })
       .from(kommoLeads)
-      .groupBy(kommoLeads.statusId),
+      .groupBy(kommoLeads.pipelineId, kommoLeads.statusId),
     db.select({ lastSync: sql<string | null>`max(${kommoLeads.syncedAt})` }).from(kommoLeads),
   ]);
 
   const lastSync = syncInfo?.lastSync ? new Date(syncInfo.lastSync) : null;
-  const mainPipeline = pipelines.find((p) => p.isMain) ?? pipelines[0] ?? null;
+  // Pipeline del embudo: el elegido, o si no el que más leads recibió en el
+  // período (NO el marcado "principal" en Kommo: hoy casi todo entra a
+  // "Filtrado" y el principal quedaba vacío).
+  const leadsByPipeline = new Map<string, number>();
+  for (const l of periodLeads) if (l.pipelineId) leadsByPipeline.set(l.pipelineId, (leadsByPipeline.get(l.pipelineId) ?? 0) + 1);
+  const pipelinesWithLeads = pipelines
+    .filter((p) => leadsByPipeline.has(String(p.id)))
+    .sort((a, b) => (leadsByPipeline.get(String(b.id)) ?? 0) - (leadsByPipeline.get(String(a.id)) ?? 0));
+  const mainPipeline =
+    pipelines.find((p) => String(p.id) === pipelineParam) ?? pipelinesWithLeads[0] ?? pipelines.find((p) => p.isMain) ?? pipelines[0] ?? null;
+  const pipelineLeads = mainPipeline ? periodLeads.filter((l) => l.pipelineId === String(mainPipeline.id)) : [];
+  const pipelineHref = (id: number) => {
+    const q = new URLSearchParams();
+    if (from) q.set("from", from);
+    if (to) q.set("to", to);
+    q.set("pipeline", String(id));
+    return `/kommo?${q.toString()}`;
+  };
 
-  const funnel = mainPipeline ? leadsFunnel(periodLeads, mainPipeline) : [];
-  const totals = pipelineTotals(statusCounts, mainPipeline);
-  const concretion = concretionFunnel(periodLeads, mainPipeline);
-  const leaderboard = salesLeaderboard(periodLeads, users, mainPipeline);
+  const funnel = mainPipeline ? leadsFunnel(pipelineLeads, mainPipeline) : [];
+  const channelFunnel = mainPipeline ? funnelByChannel(pipelineLeads, mainPipeline) : null;
+  const totals = pipelineTotals(statusCounts, pipelines);
+  const concretion = concretionFunnel(periodLeads, pipelines);
+  const leaderboard = salesLeaderboard(periodLeads, users, pipelines);
+  const channels = channelBreakdown(periodLeads);
+  const interest = interestBreakdown(periodLeads);
+  const capital = capitalBreakdown(periodLeads);
+  const winTime = timeToWin(periodLeads);
+  const prevWinTime = timeToWin(prevLeads);
   const lossBreakdown = lossReasonsBreakdown(periodLeads, lossReasons);
   const lostCount = periodLeads.filter((l) => l.statusId === LOST_STATUS_ID).length;
 
@@ -152,7 +217,47 @@ export default async function KommoPage({
           <div className="stat-value accent">{fmt(wonValue)}</div>
           <StatDelta curr={wonValue} prev={prevWonValue} />
         </div>
+        <div className="stat-card">
+          <StatLabel
+            label="Tiempo hasta ganado"
+            info="Promedio de tiempo entre el primer mensaje del lead (cuando se crea en Kommo) y que pasa a ganado, para los leads del período que ya se ganaron. Abajo, la mediana: el caso típico, sin que unos pocos cierres muy lentos la inflen."
+          />
+          <div className="stat-value">{fmtDays(winTime.avgDays)}</div>
+          <div style={{ fontSize: "0.68rem", color: "var(--text-tertiary)", marginTop: "0.25rem" }}>
+            Mediana {fmtDays(winTime.medianDays)} · {winTime.count} cierre{winTime.count !== 1 ? "s" : ""}
+            {prevWinTime.avgDays != null && ` · antes ${fmtDays(prevWinTime.avgDays)}`}
+          </div>
+        </div>
       </div>
+
+      {/* Mensajes por canal */}
+      {channels.length > 0 && (
+        <div className="card" style={{ marginTop: "1.5rem" }}>
+          <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.2rem" }}>💬 Mensajes por canal</h2>
+          <p style={{ fontSize: "0.72rem", color: "var(--text-tertiary)", margin: "0 0 1rem" }}>
+            Por dónde escribió cada lead que entró en el período, y cuántos de esos terminaron ganados.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
+            {channels.map((c) => (
+              <div key={c.channel} style={{ padding: "0.9rem 1rem", background: "var(--surface2)", borderRadius: 10, borderLeft: `3px solid ${c.color}` }}>
+                <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{c.label}</div>
+                <div style={{ fontSize: "1.6rem", fontWeight: 700, margin: "0.15rem 0" }}>
+                  {fmt(c.count)} <span style={{ fontSize: "0.55em", color: "var(--text-tertiary)", fontWeight: 500 }}>{c.pct.toFixed(0)}%</span>
+                </div>
+                <div style={{ fontSize: "0.7rem", color: "var(--text-tertiary)" }}>
+                  {c.won} ganado{c.won !== 1 ? "s" : ""}
+                  {c.closeRate != null && ` · ${c.closeRate.toFixed(1)}% cierre`}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", height: 10, borderRadius: 6, overflow: "hidden", marginTop: "1rem" }}>
+            {channels.map((c) => (
+              <div key={c.channel} title={`${c.label}: ${c.pct.toFixed(0)}%`} style={{ width: `${c.pct}%`, background: c.color }} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Estado general — todo el histórico, no solo el período */}
       <div className="card" style={{ marginTop: "1.5rem" }}>
@@ -209,10 +314,29 @@ export default async function KommoPage({
 
       {mainPipeline && (
         <div className="card" style={{ marginTop: "1.5rem" }}>
-          <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.2rem" }}>🔀 Embudo — {mainPipeline.name}</h2>
-          <p style={{ fontSize: "0.72rem", color: "var(--text-tertiary)", margin: "0 0 1rem" }}>
-            En qué etapa está HOY cada lead que entró en el período (no es el historial de por dónde pasó cada uno).
+          <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.2rem" }}>🔀 Embudo — {mainPipeline.name.trim()}</h2>
+          <p style={{ fontSize: "0.72rem", color: "var(--text-tertiary)", margin: "0 0 0.75rem" }}>
+            En qué etapa está HOY cada lead que entró en el período a este pipeline ({pipelineLeads.length} leads). No es el historial de por dónde pasó cada uno.
           </p>
+          {pipelinesWithLeads.length > 1 && (
+            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+              {pipelinesWithLeads.map((p) => {
+                const active = p.id === mainPipeline.id;
+                return (
+                  <Link
+                    key={p.id}
+                    href={pipelineHref(p.id)}
+                    style={{
+                      fontSize: "0.7rem", padding: "0.25rem 0.65rem", borderRadius: 999, textDecoration: "none",
+                      background: active ? "var(--accent)" : "var(--surface2)", color: active ? "#000" : "var(--text-secondary)", fontWeight: active ? 600 : 500,
+                    }}
+                  >
+                    {p.name.trim()} ({leadsByPipeline.get(String(p.id))})
+                  </Link>
+                );
+              })}
+            </div>
+          )}
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             {funnel.map((stage) => (
               <div key={stage.statusId}>
@@ -224,6 +348,47 @@ export default async function KommoPage({
               </div>
             ))}
           </div>
+
+          {channelFunnel && channelFunnel.channels.length > 1 && (
+            <div style={{ overflowX: "auto", marginTop: "1.5rem" }}>
+              <h3 style={{ fontSize: "0.8rem", fontWeight: 600, margin: "0 0 0.5rem" }}>Por canal</h3>
+              <table className="table" style={{ width: "100%", fontSize: "0.75rem" }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left" }}>Etapa</th>
+                    {channelFunnel.channels.map((c) => (
+                      <th key={c.channel} style={{ textAlign: "right" }}>
+                        <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: c.color, marginRight: 6 }} />
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {channelFunnel.stages.map((st) => (
+                    <tr key={st.statusId}>
+                      <td>{st.label}</td>
+                      {channelFunnel.channels.map((c) => {
+                        const n = st.counts[c.channel] ?? 0;
+                        return (
+                          <td key={c.channel} style={{ textAlign: "right" }}>
+                            {n}{" "}
+                            <span style={{ color: "var(--text-tertiary)" }}>({c.total > 0 ? ((n / c.total) * 100).toFixed(0) : 0}%)</span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                  <tr style={{ fontWeight: 600 }}>
+                    <td>Total</td>
+                    {channelFunnel.channels.map((c) => (
+                      <td key={c.channel} style={{ textAlign: "right" }}>{c.total}</td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -280,10 +445,15 @@ export default async function KommoPage({
         </div>
       )}
 
+      <h2 style={{ fontSize: "0.9rem", fontWeight: 600, margin: "1.5rem 0 0.85rem" }}>👤 Perfil de leads</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
+        <AnswerCard b={interest} colors={ANSWER_COLORS} />
+        <AnswerCard b={capital} colors={ANSWER_COLORS} />
+      </div>
+
       {breakdowns.length > 0 && (
         <>
-          <h2 style={{ fontSize: "0.9rem", fontWeight: 600, margin: "1.5rem 0 0.85rem" }}>👤 Perfil de leads</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginTop: "1rem" }}>
             {breakdowns.map((b) => (
               <div key={b.fieldId} className="card">
                 <h3 style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.15rem" }}>{b.fieldName}</h3>

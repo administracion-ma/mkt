@@ -9,7 +9,7 @@ export async function runKommoSync(): Promise<{ ok: boolean; message: string }> 
     // Solo los últimos 60 días: el histórico completo (13 meses, decenas de
     // miles de leads) tarda varios minutos y lo hace el cron diario de GitHub;
     // desde el botón superaría el tiempo máximo de una función de Vercel.
-    const { synced } = await syncKommoLeads(60);
+    const { synced } = await syncKommoLeads(60, undefined, 10);
     revalidatePath("/kommo");
     return { ok: true, message: `${synced} lead(s) de los últimos 60 días sincronizados desde Kommo.` };
   } catch (err) {
