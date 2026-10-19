@@ -111,7 +111,10 @@ export async function getLeadsCreatedBetween(from: Date, to: Date, maxPages = 40
     page++;
   }
   if (page > maxPages) console.warn(`Kommo: se alcanzó el tope de ${maxPages} páginas — quedaron afuera los leads más viejos del rango.`);
-  return out;
+  // Si entra un lead nuevo mientras se pagina, todo se corre un lugar y el
+  // mismo lead aparece en dos páginas seguidas. Se deduplica por id (el
+  // upsert en tanda falla si un id se repite dentro del mismo INSERT).
+  return Array.from(new Map(out.map((l) => [l.id, l])).values());
 }
 
 export type KommoChannel = "whatsapp" | "instagram" | "facebook" | "otro";
