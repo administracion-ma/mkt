@@ -15,6 +15,10 @@ import {
   capitalBreakdown,
   timeToWin,
   type AnswerBreakdown,
+  INTEREST_OPTIONS,
+  INTEREST_COLORS,
+  CAPITAL_OPTIONS,
+  CAPITAL_COLORS,
   WON_STATUS_ID,
   LOST_STATUS_ID,
 } from "@/lib/kommo/insights";
@@ -22,6 +26,7 @@ import Link from "next/link";
 import { PeriodFilter } from "@/components/PeriodFilter";
 import { StatDelta } from "@/components/StatDelta";
 import { StatLabel } from "@/components/StatLabel";
+import { DonutChart } from "@/components/DonutChart";
 
 export const dynamic = "force-dynamic";
 
@@ -45,34 +50,30 @@ function fmtDays(d: number | null): string {
   return `${d.toFixed(d < 10 ? 1 : 0)} días`;
 }
 
-function AnswerCard({ b, colors }: { b: AnswerBreakdown; colors: string[] }) {
+// Torta de una pregunta del bot. Base = los que respondieron con una de las
+// opciones conocidas (n), así es comparable con estadísticas de otras
+// campañas; las respuestas escritas a mano se informan aparte.
+function AnswerDonutCard({ b, options, colors }: { b: AnswerBreakdown; options: readonly string[]; colors: Record<string, string> }) {
+  const slices = options.map((o) => ({ label: o, count: b.rows.find((r) => r.value === o)?.count ?? 0, color: colors[o] }));
+  const n = slices.reduce((s, x) => s + x.count, 0);
+  const other = b.answeredCount - n;
   return (
     <div className="card">
-      <h3 style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.15rem" }}>{b.title}</h3>
-      <p style={{ fontSize: "0.68rem", color: "var(--text-tertiary)", margin: "0 0 0.9rem" }}>
-        {b.answeredCount} de {b.totalCount} leads respondieron
-        {b.totalCount > 0 && ` (${((b.answeredCount / b.totalCount) * 100).toFixed(0)}%)`}. El % es sobre los que respondieron.
+      <h3 style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.15rem" }}>
+        {b.title} <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>(n={n})</span>
+      </h3>
+      <p style={{ fontSize: "0.68rem", color: "var(--text-tertiary)", margin: "0 0 1rem" }}>
+        % sobre los que completaron el campo con una opción. {b.totalCount - b.answeredCount} de {b.totalCount} leads no respondieron
+        {other > 0 && `; ${other} escribieron otra cosa (no se cuentan)`}.
       </p>
-      {b.rows.length === 0 ? (
+      {n === 0 ? (
         <p style={{ fontSize: "0.75rem", color: "var(--text-tertiary)", margin: 0 }}>Nadie respondió en este período.</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
-          {b.rows.map((row, i) => (
-            <div key={row.value}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.74rem", marginBottom: "0.15rem" }}>
-                <span>{row.value}</span>
-                <span style={{ fontWeight: 600 }}>{row.count} <span style={{ color: "var(--text-tertiary)", fontWeight: 500 }}>({row.pct.toFixed(0)}%)</span></span>
-              </div>
-              <Bar pct={row.pct} color={colors[i % colors.length]} />
-            </div>
-          ))}
-        </div>
+        <DonutChart slices={slices} centerLabel="respondieron" />
       )}
     </div>
   );
 }
-
-const ANSWER_COLORS = ["#f7931a", "#fbbf24", "#60a5fa", "#a78bfa", "#2dd4bf", "#888"];
 
 const LOSS_COLORS = ["#ef4444", "#f97316", "#eab308", "#a78bfa", "#60a5fa", "#2dd4bf", "#f472b6", "#888"];
 
@@ -447,8 +448,8 @@ export default async function KommoPage({
 
       <h2 style={{ fontSize: "0.9rem", fontWeight: 600, margin: "1.5rem 0 0.85rem" }}>👤 Perfil de leads</h2>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
-        <AnswerCard b={interest} colors={ANSWER_COLORS} />
-        <AnswerCard b={capital} colors={ANSWER_COLORS} />
+        <AnswerDonutCard b={interest} options={INTEREST_OPTIONS} colors={INTEREST_COLORS} />
+        <AnswerDonutCard b={capital} options={CAPITAL_OPTIONS} colors={CAPITAL_COLORS} />
       </div>
 
       {breakdowns.length > 0 && (

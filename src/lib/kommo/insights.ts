@@ -280,7 +280,13 @@ function fieldValue(l: KommoLeadRow, matches: (name: string) => boolean): string
 }
 
 export const INTEREST_OPTIONS = ["Ingreso pasivo USD", "Acumular BTC", "Estoy explorando"] as const;
-const OTHER_ANSWER = "Otra respuesta (texto libre)";
+// Colores fijos por opción (validados para daltonismo sobre el fondo oscuro).
+export const INTEREST_COLORS: Record<string, string> = {
+  "Ingreso pasivo USD": "#3987e5",
+  "Acumular BTC": "#d95926",
+  "Estoy explorando": "#199e70",
+};
+export const OTHER_ANSWER = "Otra respuesta (texto libre)";
 
 export function normalizeInterest(raw: string): string {
   const v = raw.toLowerCase();
@@ -290,7 +296,17 @@ export function normalizeInterest(raw: string): string {
   return OTHER_ANSWER;
 }
 
-export const CAPITAL_OPTIONS = ["Menos de $5.000", "$5.000 a $10.000", "$10.000 a $15.000", "Más de $15.000"] as const;
+// "$5.000 a $15.000" es una opción vieja del bot que todavía aparece en
+// algunos leads: va entre 5-10k y 10-15k para respetar el orden de montos.
+export const CAPITAL_OPTIONS = ["Menos de $5.000", "$5.000 a $10.000", "$5.000 a $15.000", "$10.000 a $15.000", "Más de $15.000"] as const;
+// Un solo tono de menor a mayor monto (son rangos ordenados, no categorías).
+export const CAPITAL_COLORS: Record<string, string> = {
+  "Menos de $5.000": "#184f95",
+  "$5.000 a $10.000": "#2a78d6",
+  "$5.000 a $15.000": "#5598e7",
+  "$10.000 a $15.000": "#86b6ef",
+  "Más de $15.000": "#b7d3f6",
+};
 
 // Lee los montos del texto ("$5.000 a $10.000", "5.000 a 10.000 USD",
 // "Menos de $4500", "+$20.000") y lo ubica en un rango fijo.
