@@ -1,4 +1,4 @@
-import { and, gte, lte } from "drizzle-orm";
+import { and, gte, lte, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { kommoLeads } from "@/db/schema";
 import { getPipelines, getLeadsCustomFields, getUsers, getLossReasons } from "@/lib/kommo/api";
@@ -84,19 +84,23 @@ export default async function KommoPage({
     );
   }
 
-  const [periodLeads, prevLeads, allLeads] = await Promise.all([
+  const [periodLeads, prevLeads, statusCounts, [syncInfo]] = await Promise.all([
     db.query.kommoLeads.findMany({ where: and(gte(kommoLeads.kommoCreatedAt, fromDate), lte(kommoLeads.kommoCreatedAt, toDate)) }),
     db.query.kommoLeads.findMany({ where: and(gte(kommoLeads.kommoCreatedAt, prevWindowFrom), lte(kommoLeads.kommoCreatedAt, fromDate)) }),
     // Todo el histórico — para "estado general del pipeline", que es la foto
-    // completa, no acotada al período elegido arriba.
-    db.query.kommoLeads.findMany(),
+    // completa, no acotada al período elegido arriba. Solo conteos por etapa.
+    db
+      .select({ statusId: kommoLeads.statusId, count: sql<number>`count(*)::int` })
+      .from(kommoLeads)
+      .groupBy(kommoLeads.statusId),
+    db.select({ lastSync: sql<string | null>`max(${kommoLeads.syncedAt})` }).from(kommoLeads),
   ]);
 
-  const lastSync = allLeads.reduce<Date | null>((latest, l) => (!latest || l.syncedAt > latest ? l.syncedAt : latest), null);
+  const lastSync = syncInfo?.lastSync ? new Date(syncInfo.lastSync) : null;
   const mainPipeline = pipelines.find((p) => p.isMain) ?? pipelines[0] ?? null;
 
   const funnel = mainPipeline ? leadsFunnel(periodLeads, mainPipeline) : [];
-  const totals = pipelineTotals(allLeads, mainPipeline);
+  const totals = pipelineTotals(statusCounts, mainPipeline);
   const concretion = concretionFunnel(periodLeads, mainPipeline);
   const leaderboard = salesLeaderboard(periodLeads, users, mainPipeline);
   const lossBreakdown = lossReasonsBreakdown(periodLeads, lossReasons);
@@ -117,7 +121,7 @@ export default async function KommoPage({
       <div className="page-header">
         <h1 className="page-title">Kommo (CRM)</h1>
         <p className="page-subtitle">
-          {allLeads.length === 0 && pipelines.length > 0
+          {totals.total === 0 && pipelines.length > 0
             ? "Sin leads sincronizados todavía — sincronizá desde Administración."
             : lastSync
               ? `Última sincronización: ${lastSync.toLocaleString("es-AR")}`

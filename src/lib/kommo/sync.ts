@@ -32,10 +32,10 @@ function mapLead(l: KommoLeadRaw) {
 // Sincroniza los leads creados en los últimos `days` (default ~13 meses, para
 // tener de sobra para comparar año contra año). Upsert por kommoLeadId: un
 // lead que cambió de etapa desde el último sync se actualiza, no duplica.
-export async function syncKommoLeads(days = 400): Promise<{ synced: number }> {
+export async function syncKommoLeads(days = 400, maxPages?: number): Promise<{ synced: number }> {
   const to = new Date();
   const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
-  const raw = await getLeadsCreatedBetween(from, to);
+  const raw = await getLeadsCreatedBetween(from, to, maxPages);
   if (raw.length === 0) return { synced: 0 };
 
   // Insertar de a 1 por lead (un viaje a la base cada uno) escalaba mal: con

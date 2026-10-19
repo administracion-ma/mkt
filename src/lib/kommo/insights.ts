@@ -86,14 +86,19 @@ export type PipelineTotals = {
   responseRate: number | null; // avanzados / total
 };
 
+export type StatusCount = { statusId: string | null; count: number };
+
 // Totales de todo el histórico (no acotado al período) — "cómo viene el
 // pipeline en general", la foto completa más allá de lo que entró este mes.
-export function pipelineTotals(leads: KommoLeadRow[], pipeline: KommoPipeline | null): PipelineTotals {
-  const total = leads.length;
+// Recibe conteos por etapa (un GROUP BY en la base) en vez de los leads: el
+// histórico son decenas de miles de filas y no tiene sentido traerlas todas.
+export function pipelineTotals(counts: StatusCount[], pipeline: KommoPipeline | null): PipelineTotals {
   const stage = firstOpenStage(pipeline);
-  const won = leads.filter((l) => l.statusId === WON_STATUS_ID).length;
-  const lost = leads.filter((l) => l.statusId === LOST_STATUS_ID).length;
-  const contacted = stage ? leads.filter((l) => l.statusId !== String(stage.id)).length : total;
+  const countOf = (id: string) => counts.find((c) => c.statusId === id)?.count ?? 0;
+  const total = counts.reduce((s, c) => s + c.count, 0);
+  const won = countOf(WON_STATUS_ID);
+  const lost = countOf(LOST_STATUS_ID);
+  const contacted = stage ? total - countOf(String(stage.id)) : total;
   return {
     total,
     contacted,

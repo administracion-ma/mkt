@@ -89,19 +89,19 @@ export type KommoLeadRaw = {
   }> | null;
 };
 
-// Trae TODOS los leads creados en el rango [from, to) — pagina hasta que
-// Kommo deja de devolver resultados (204). `limit:250` es el máximo que
-// permite la API por página, para minimizar la cantidad de requests.
-export async function getLeadsCreatedBetween(from: Date, to: Date): Promise<KommoLeadRaw[]> {
+// Trae los leads creados en el rango [from, to) — pagina hasta que Kommo deja
+// de devolver resultados (204). `limit:250` es el máximo que permite la API
+// por página. Ordenado del MÁS NUEVO al más viejo: si se llega al tope de
+// páginas, lo que queda afuera es lo más antiguo, nunca lo de esta semana
+// (antes era al revés y con 12.500+ leads se perdían justo los recientes).
+export async function getLeadsCreatedBetween(from: Date, to: Date, maxPages = 400): Promise<KommoLeadRaw[]> {
   const fromUnix = Math.floor(from.getTime() / 1000);
   const toUnix = Math.floor(to.getTime() / 1000);
   const out: KommoLeadRaw[] = [];
   let page = 1;
-  // Tope de seguridad (50 páginas × 250 = 12.500 leads) para no colgar la
-  // función si algún día hay un volumen enorme — se puede subir si hace falta.
-  while (page <= 50) {
+  while (page <= maxPages) {
     const body = (await kommoGet(
-      `/leads?filter[created_at][from]=${fromUnix}&filter[created_at][to]=${toUnix}&page=${page}&limit=250&order[created_at]=asc`,
+      `/leads?filter[created_at][from]=${fromUnix}&filter[created_at][to]=${toUnix}&page=${page}&limit=250&order[created_at]=desc`,
     )) as { _embedded?: { leads?: KommoLeadRaw[] } } | null;
     const leads = body?._embedded?.leads ?? [];
     if (leads.length === 0) break;
@@ -109,6 +109,7 @@ export async function getLeadsCreatedBetween(from: Date, to: Date): Promise<Komm
     if (leads.length < 250) break;
     page++;
   }
+  if (page > maxPages) console.warn(`Kommo: se alcanzó el tope de ${maxPages} páginas — quedaron afuera los leads más viejos del rango.`);
   return out;
 }
 

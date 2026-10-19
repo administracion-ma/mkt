@@ -6,9 +6,12 @@ import { syncKommoLeads } from "@/lib/kommo/sync";
 // Botón "Sincronizar Kommo ahora" en /admin — mismo patrón que runYoutubeSync/runAdsSync.
 export async function runKommoSync(): Promise<{ ok: boolean; message: string }> {
   try {
-    const { synced } = await syncKommoLeads();
+    // Solo los últimos 60 días: el histórico completo (13 meses, decenas de
+    // miles de leads) tarda varios minutos y lo hace el cron diario de GitHub;
+    // desde el botón superaría el tiempo máximo de una función de Vercel.
+    const { synced } = await syncKommoLeads(60);
     revalidatePath("/kommo");
-    return { ok: true, message: `${synced} lead(s) sincronizados desde Kommo.` };
+    return { ok: true, message: `${synced} lead(s) de los últimos 60 días sincronizados desde Kommo.` };
   } catch (err) {
     return { ok: false, message: describeError(err) };
   }
