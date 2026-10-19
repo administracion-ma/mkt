@@ -77,6 +77,9 @@ Todos los cron jobs viven en `.github/workflows/` y corren **fuera del hosting**
 | `weekly-report.yml` | lunes 11am | Genera el informe semanal con IA |
 | `db-push.yml` | manual | Aplica el schema de Drizzle directo (uso excepcional) |
 | `import-instagram-history.yml` | manual | Importa el historial completo de Instagram (una sola vez, al dar de alta la cuenta) |
+| `keepalive.yml` | días 1 y 15 | Re-habilita todos los workflows (ver abajo) |
+
+**Ojo:** GitHub apaga solos los workflows programados tras 60 días sin commits en el repo. Ya pasó una vez (sep-2026) y la app se quedó sin datos nuevos sin que nadie lo notara. `keepalive.yml` lo evita; si igual ves en la pestaña Actions un workflow marcado como *disabled*, corré "Mantener robots encendidos" a mano.
 
 ---
 

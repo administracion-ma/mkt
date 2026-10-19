@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { connectAdAccount } from "@/lib/ads/actions";
+import { runSafely } from "@/lib/client/safe-action";
 
 export function ConnectAdAccountForm({ connectedLabel }: { connectedLabel: string | null }) {
   const [pending, startTransition] = useTransition();
@@ -12,8 +13,10 @@ export function ConnectAdAccountForm({ connectedLabel }: { connectedLabel: strin
     const formData = new FormData(e.currentTarget);
     setResult(null);
     startTransition(async () => {
-      const r = await connectAdAccount(formData);
-      setResult(r);
+      await runSafely(
+        async () => setResult(await connectAdAccount(formData)),
+        (message) => setResult({ ok: false, message }),
+      );
     });
   }
 

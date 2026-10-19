@@ -1,4 +1,5 @@
 import { publishTiktokVideoNow, deleteTiktokVideo } from "@/lib/tiktok/actions";
+import { SafeForm } from "@/components/SafeForm";
 
 export type TiktokVideoRow = {
   id: number;
@@ -78,16 +79,16 @@ export function TiktokVideoList({ videos }: { videos: TiktokVideoRow[] }) {
               <td>
                 <div style={{ display: "flex", gap: "0.3rem", justifyContent: "flex-end" }}>
                   {(v.status === "SCHEDULED" || v.status === "FAILED" || v.status === "DRAFT") && (
-                    <form action={publishTiktokVideoNow}>
+                    <SafeForm action={publishTiktokVideoNow}>
                       <input type="hidden" name="id" value={v.id} />
                       <button type="submit" className="btn-ghost" style={{ fontSize: "0.7rem" }}>Publicar ahora</button>
-                    </form>
+                    </SafeForm>
                   )}
                   {v.status !== "PUBLISHING" && (
-                    <form action={deleteTiktokVideo}>
+                    <SafeForm action={deleteTiktokVideo}>
                       <input type="hidden" name="id" value={v.id} />
                       <button type="submit" className="btn-ghost" style={{ fontSize: "0.7rem" }}>Eliminar</button>
-                    </form>
+                    </SafeForm>
                   )}
                 </div>
               </td>

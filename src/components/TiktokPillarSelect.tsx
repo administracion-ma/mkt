@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { assignTiktokVideoPillar } from "@/lib/tiktok/actions";
+import { runSafely } from "@/lib/client/safe-action";
 
 // Mismo patrón que YoutubePillarSelect/PillarAssignSelect.
 export function TiktokPillarSelect({
@@ -18,8 +19,7 @@ export function TiktokPillarSelect({
   function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value ? Number(e.target.value) : null;
     startTransition(async () => {
-      await assignTiktokVideoPillar(videoId, value);
-      router.refresh();
+      if (await runSafely(() => assignTiktokVideoPillar(videoId, value))) router.refresh();
     });
   }
 

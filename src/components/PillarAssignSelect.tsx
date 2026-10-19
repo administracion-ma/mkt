@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { assignCampaignPillar } from "@/lib/ads/actions";
+import { runSafely } from "@/lib/client/safe-action";
 
 export function PillarAssignSelect({
   campaignId, pillarId, pillars,
@@ -17,8 +18,7 @@ export function PillarAssignSelect({
   function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value ? Number(e.target.value) : null;
     startTransition(async () => {
-      await assignCampaignPillar(campaignId, value);
-      router.refresh();
+      if (await runSafely(() => assignCampaignPillar(campaignId, value))) router.refresh();
     });
   }
 

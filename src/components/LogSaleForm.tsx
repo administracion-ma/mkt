@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { logSale } from "@/lib/sales/actions";
+import { runSafely } from "@/lib/client/safe-action";
 
 export function LogSaleForm({ campaigns }: { campaigns: { campaignId: number; name: string }[] }) {
   const [pending, startTransition] = useTransition();
@@ -13,9 +14,14 @@ export function LogSaleForm({ campaigns }: { campaigns: { campaignId: number; na
     const formData = new FormData(e.currentTarget);
     setResult(null);
     startTransition(async () => {
-      const r = await logSale(formData);
-      setResult(r);
-      if (r.ok) formRef.current?.reset();
+      await runSafely(
+        async () => {
+          const r = await logSale(formData);
+          setResult(r);
+          if (r.ok) formRef.current?.reset();
+        },
+        (message) => setResult({ ok: false, message }),
+      );
     });
   }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { runSafely } from "@/lib/client/safe-action";
 
 export function ActionCard({
   title, description, buttonLabel, action,
@@ -16,8 +17,12 @@ export function ActionCard({
   function handleClick() {
     setResult(null);
     startTransition(async () => {
-      const r = await action();
-      setResult(r);
+      // Si la función se corta (timeout de Vercel, red), mostramos el error
+      // en la card en vez de tumbar la página.
+      await runSafely(
+        async () => setResult(await action()),
+        (message) => setResult({ ok: false, message }),
+      );
     });
   }
 

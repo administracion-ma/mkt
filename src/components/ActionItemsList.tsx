@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { setActionItemStatus } from "@/lib/action-items/actions";
+import { runSafely } from "@/lib/client/safe-action";
 
 export type ActionItemRow = { id: number; source: string; text: string };
 
@@ -12,7 +13,7 @@ export function ActionItemsList({ items }: { items: ActionItemRow[] }) {
 
   function update(id: number, status: "done" | "dismissed") {
     startTransition(async () => {
-      await setActionItemStatus(id, status);
+      await runSafely(() => setActionItemStatus(id, status));
     });
   }
 

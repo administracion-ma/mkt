@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { SafeForm } from "@/components/SafeForm";
 import type { CalendarPost, Editor, Pillar } from "./types";
 import {
   CHANNEL_LABEL,
@@ -120,18 +121,18 @@ export function PostDetailModal({
 
       <div style={{ display: "flex", gap: "0.5rem", marginTop: "1.25rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
         {(post.status === "SCHEDULED" || post.status === "FAILED") && (
-          <form action={publishPostNow} onSubmit={() => startTransition(() => {})}>
+          <SafeForm action={publishPostNow} onSubmit={() => startTransition(() => {})}>
             <input type="hidden" name="id" value={post.id} />
             <button type="submit" disabled={pending} className="btn btn-primary">
               {pending ? "Publicando…" : "Publicar ahora"}
             </button>
-          </form>
+          </SafeForm>
         )}
         {post.status !== "PUBLISHED" && (
-          <form action={deletePost}>
+          <SafeForm action={deletePost}>
             <input type="hidden" name="id" value={post.id} />
             <button type="submit" className="btn btn-ghost">Eliminar</button>
-          </form>
+          </SafeForm>
         )}
         <button type="button" onClick={onClose} className="btn btn-secondary" style={{ marginLeft: "auto" }}>
           Cerrar
@@ -175,7 +176,7 @@ export function NewPostModal({
   return (
     <Overlay onClose={onClose}>
       <h3 style={{ fontSize: "1rem", fontWeight: 700, margin: "0 0 1rem" }}>Nuevo post</h3>
-      <form
+      <SafeForm
         action={createPost}
         onSubmit={() => {
           onClose();
@@ -309,7 +310,7 @@ export function NewPostModal({
             {submitting === "now" ? "Publicando…" : "Publicar ahora"}
           </button>
         </div>
-      </form>
+      </SafeForm>
     </Overlay>
   );
 }

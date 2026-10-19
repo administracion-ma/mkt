@@ -1,0 +1,39 @@
+name: Mantener robots encendidos
+
+# GitHub apaga solos los workflows programados de un repo después de 60 días
+# sin commits ("disabled_inactivity"). Eso pasó el 19-sep-2026 y dejó la app
+# sin datos nuevos (métricas, publicaciones programadas, token de IG) sin que
+# nadie se diera cuenta. Este workflow vuelve a habilitar TODOS los workflows
+# cada 2 semanas — habilitar un workflow por la API reinicia el contador de
+# inactividad, así que nunca llegan a los 60 días.
+#
+# También corre cuando se pushea este archivo, para reactivar todo de una.
+
+on:
+  schedule:
+    - cron: "0 9 1,15 * *"
+  push:
+    paths:
+      - .github/workflows/keepalive.yml
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Habilitar todos los workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for wf in $(gh api "repos/${{ github.repository }}/actions/workflows" --paginate --jq '.workflows[].id'); do
+            state=$(gh api "repos/${{ github.repository }}/actions/workflows/$wf" --jq '.state')
+            name=$(gh api "repos/${{ github.repository }}/actions/workflows/$wf" --jq '.name')
+            if gh api -X PUT "repos/${{ github.repository }}/actions/workflows/$wf/enable" --silent; then
+              echo "✓ $name (estaba: $state)"
+            else
+              echo "✕ $name (estaba: $state) — no se pudo habilitar"
+            fi
+          done

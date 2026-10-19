@@ -1,4 +1,5 @@
 import { publishYoutubeVideoNow, deleteYoutubeVideo } from "@/lib/youtube/actions";
+import { SafeForm } from "@/components/SafeForm";
 
 export type YoutubeVideoRow = {
   id: number;
@@ -90,16 +91,16 @@ export function YoutubeVideoList({ videos }: { videos: YoutubeVideoRow[] }) {
               <td>
                 <div style={{ display: "flex", gap: "0.3rem", justifyContent: "flex-end" }}>
                   {(v.status === "SCHEDULED" || v.status === "FAILED" || v.status === "DRAFT") && (
-                    <form action={publishYoutubeVideoNow}>
+                    <SafeForm action={publishYoutubeVideoNow}>
                       <input type="hidden" name="id" value={v.id} />
                       <button type="submit" className="btn-ghost" style={{ fontSize: "0.7rem" }}>Publicar ahora</button>
-                    </form>
+                    </SafeForm>
                   )}
                   {v.status !== "PUBLISHING" && (
-                    <form action={deleteYoutubeVideo}>
+                    <SafeForm action={deleteYoutubeVideo}>
                       <input type="hidden" name="id" value={v.id} />
                       <button type="submit" className="btn-ghost" style={{ fontSize: "0.7rem" }}>Eliminar</button>
-                    </form>
+                    </SafeForm>
                   )}
                 </div>
               </td>

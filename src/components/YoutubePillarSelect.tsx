@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { assignYoutubeVideoPillar } from "@/lib/youtube/actions";
+import { runSafely } from "@/lib/client/safe-action";
 
 // Mismo patrón que PillarAssignSelect (campañas de ads), pero para videos de
 // YouTube — permite cruzar YT con IG orgánico y pauta por pilar de contenido.
@@ -19,8 +20,7 @@ export function YoutubePillarSelect({
   function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value ? Number(e.target.value) : null;
     startTransition(async () => {
-      await assignYoutubeVideoPillar(videoId, value);
-      router.refresh();
+      if (await runSafely(() => assignYoutubeVideoPillar(videoId, value))) router.refresh();
     });
   }
 

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { saveGoals, type Goals } from "@/lib/goals/actions";
+import { runSafely } from "@/lib/client/safe-action";
 
 export function GoalsForm({ initial }: { initial: Goals | null }) {
   const [pending, startTransition] = useTransition();
@@ -12,7 +13,10 @@ export function GoalsForm({ initial }: { initial: Goals | null }) {
     const formData = new FormData(e.currentTarget);
     setResult(null);
     startTransition(async () => {
-      setResult(await saveGoals(formData));
+      await runSafely(
+        async () => setResult(await saveGoals(formData)),
+        (message) => setResult({ ok: false, message }),
+      );
     });
   }
 
