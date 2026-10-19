@@ -15,6 +15,12 @@ on:
       - .github/workflows/sync-kommo.yml
   workflow_dispatch: {}
 
+# Nunca dos sincronizaciones a la vez: Kommo limita las requests por cuenta
+# y dos en paralelo hacen que corte la conexión.
+concurrency:
+  group: sync-kommo
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest

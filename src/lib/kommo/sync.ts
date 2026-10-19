@@ -40,7 +40,9 @@ function mapLead(l: KommoLeadRaw, channels: ChannelMaps) {
 export async function syncKommoLeads(days = 400, maxPages?: number, talkPages?: number): Promise<{ synced: number }> {
   const to = new Date();
   const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
-  const [raw, channels] = await Promise.all([getLeadsCreatedBetween(from, to, maxPages), getChannelMaps(talkPages)]);
+  // En serie, no en paralelo: Kommo corta la conexión si se le pide demasiado rápido.
+  const raw = await getLeadsCreatedBetween(from, to, maxPages);
+  const channels = await getChannelMaps(talkPages);
   if (raw.length === 0) return { synced: 0 };
 
   // Insertar de a 1 por lead (un viaje a la base cada uno) escalaba mal: con

@@ -12,8 +12,33 @@ function headers() {
   };
 }
 
-async function kommoGet(path: string): Promise<unknown> {
-  const res = await fetch(`${BASE()}${path}`, { headers: headers(), signal: AbortSignal.timeout(15000) });
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Kommo limita a ~7 requests/segundo por cuenta: si se pasa, responde 429 o
+// directamente corta la conexión ("other side closed"). Se espacian las
+// llamadas y se reintenta con espera creciente en vez de abortar todo el sync.
+let lastCallAt = 0;
+const MIN_GAP_MS = 180;
+
+async function kommoGet(path: string, attempt = 1): Promise<unknown> {
+  const wait = lastCallAt + MIN_GAP_MS - Date.now();
+  if (wait > 0) await sleep(wait);
+  lastCallAt = Date.now();
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE()}${path}`, { headers: headers(), signal: AbortSignal.timeout(20000) });
+  } catch (err) {
+    if (attempt < 5) {
+      await sleep(1000 * 2 ** attempt);
+      return kommoGet(path, attempt + 1);
+    }
+    throw err;
+  }
+  if ((res.status === 429 || res.status >= 500) && attempt < 5) {
+    await sleep(1000 * 2 ** attempt);
+    return kommoGet(path, attempt + 1);
+  }
   // Kommo devuelve 204 (sin cuerpo) cuando una lista no tiene resultados para
   // esa página/filtro — NO es un error, es "vacío". Tratar de hacer .json()
   // sobre un 204 explota, así que se corta acá.
