@@ -29,13 +29,12 @@ npx eslint .        # 0 errores (hay 4 warnings de <img> conocidos y aceptados)
 
 Postgres en Supabase, accedido vía el **pooler en modo "Transaction"** (puerto `6543`, NO el `5432` de conexión directa — con varias funciones serverless concurrentes el directo se agota y la app empieza a tirar `504`).
 
-Las tablas se crean/actualizan con una migración propia (no usamos `drizzle-kit push` en producción, es más predecible así):
+Las tablas se crean/actualizan con una migración propia e **idempotente** (`src/lib/admin/migrate.ts` + `scripts/migrate.ts`): todo es `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`, seguro correr cuantas veces sea.
 
-- **UI**: entrar a `/admin` → botón "Aplicar migración". Es **idempotente**, seguro correr varias veces.
-- **CLI**: `npm run db:push` aplica el schema de Drizzle directo (usado por el workflow `db-push.yml`, pensado más para desarrollo/emergencias que para el flujo normal).
-- El código de la migración vive en `src/lib/admin/migrate.ts` — crea tablas con `CREATE TABLE IF NOT EXISTS` e índices con `CREATE INDEX IF NOT EXISTS`.
+- **Automática en cada deploy**: Vercel corre el script `vercel-build` de `package.json` (`tsx scripts/migrate.ts && next build`), así que la base se actualiza ANTES de que el código nuevo salga al aire. Si la migración falla, el deploy falla y queda online la versión anterior — nunca se publica código que espera columnas que no existen. Si se migra a otro hosting, replicar esto en su comando de build.
+- **Manual (por si acaso)**: `/admin` → "Aplicar migración", o el workflow `db-push.yml`.
 
-Cada vez que se agrega una tabla/columna nueva al `schema.ts`, hay que sumar el `CREATE TABLE`/`ALTER` correspondiente ahí y correr "Aplicar migración" en producción.
+Cada vez que se agrega una tabla/columna nueva al `schema.ts`, hay que sumar el `CREATE TABLE`/`ALTER` correspondiente en `migrate.ts` — el resto es automático.
 
 ---
 
