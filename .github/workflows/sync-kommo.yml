@@ -5,6 +5,14 @@ on:
     # 1 vez por día — igual que YouTube/TikTok, los leads no cambian tan
     # rápido como para necesitar más frecuencia.
     - cron: "0 12 * * *"
+  # También al cambiar el código de sincronización (p.ej. un campo nuevo),
+  # para que los leads se re-sincronicen con la lógica nueva sin esperar al
+  # día siguiente.
+  push:
+    paths:
+      - src/lib/kommo/**
+      - scripts/sync-kommo.ts
+      - .github/workflows/sync-kommo.yml
   workflow_dispatch: {}
 
 jobs:
