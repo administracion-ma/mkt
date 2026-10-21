@@ -29,7 +29,7 @@ import { PeriodFilter } from "@/components/PeriodFilter";
 import { StatDelta } from "@/components/StatDelta";
 import { StatLabel } from "@/components/StatLabel";
 import { DonutChart } from "@/components/DonutChart";
-import { DrillPeriod, DrillStat } from "@/components/kommo/LeadsDrilldown";
+import { ALL_TIME, DrillPeriod, DrillStat } from "@/components/kommo/LeadsDrilldown";
 
 export const dynamic = "force-dynamic";
 
@@ -204,7 +204,7 @@ export default async function KommoPage({
       <PeriodFilter />
 
       <DrillPeriod from={fromDate.toISOString()} to={toDate.toISOString()}>
-      <p style={{ fontSize: "0.7rem", color: "var(--text-tertiary)", margin: "0.75rem 0 0" }}>Tocá cualquier número del período para ver la lista de leads y abrirlos en Kommo.</p>
+      <p style={{ fontSize: "0.7rem", color: "var(--text-tertiary)", margin: "0.75rem 0 0" }}>Tocá los números que dicen &quot;Ver leads&quot; (o los subrayados) para ver la lista y abrir cada lead en Kommo.</p>
 
       {/* KPIs del período elegido */}
       <div className="stats-grid" style={{ marginTop: "1.25rem" }}>
@@ -316,11 +316,15 @@ export default async function KommoPage({
         <div className="stats-grid" style={{ marginTop: "0.85rem" }}>
           <div>
             <StatLabel label="Total de leads" info="Todos los leads que entraron a Kommo alguna vez, sin filtrar por fecha." />
-            <div className="stat-value">{fmt(totals.total)}</div>
+            <DrillStat filter="all" title="Todos los leads (histórico)" period={ALL_TIME}>
+              <div className="stat-value">{fmt(totals.total)}</div>
+            </DrillStat>
           </div>
           <div>
             <StatLabel label="Avanzaron" info="Leads que salieron de la primera etapa del pipeline — tuvieron algún movimiento más allá de ingresar." />
-            <div className="stat-value">{fmt(totals.contacted)}</div>
+            <DrillStat filter="inprog" title="Leads que avanzaron (histórico)" period={ALL_TIME}>
+              <div className="stat-value">{fmt(totals.contacted)}</div>
+            </DrillStat>
           </div>
           <div>
             <StatLabel label="Tasa de avance" info="Avanzaron sobre el total histórico." />
@@ -329,7 +333,9 @@ export default async function KommoPage({
           <div>
             <StatLabel label="Ganados / Perdidos" info="Leads que llegaron a una etapa final (ganada o perdida) en todo el histórico, y qué % de esos cierres fue ganado." />
             <div className="stat-value">
-              {fmt(totals.won)} <span style={{ color: "var(--text-tertiary)", fontSize: "0.75em" }}>/</span> {fmt(totals.lost)}
+              <DrillStat block={false} filter="won" title="Ganados (histórico)" period={ALL_TIME}>{fmt(totals.won)}</DrillStat>{" "}
+              <span style={{ color: "var(--text-tertiary)", fontSize: "0.75em" }}>/</span>{" "}
+              <DrillStat block={false} filter="lost" title="Perdidos (histórico)" period={ALL_TIME}>{fmt(totals.lost)}</DrillStat>
               {totals.closeRate != null && (
                 <span style={{ color: "var(--text-tertiary)", fontSize: "0.6em", fontWeight: 500, marginLeft: "0.4rem" }}>
                   ({totals.closeRate.toFixed(0)}% cierre)

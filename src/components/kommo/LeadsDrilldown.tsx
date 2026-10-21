@@ -15,18 +15,24 @@ export function DrillPeriod({ from, to, children }: Period & { children: React.R
 
 type Row = { id: string; name: string; createdAt: string; stage: string; pipeline: string; channel: string; url: string };
 
+// Período "todo el histórico" para los números que no dependen del filtro de fechas.
+export const ALL_TIME: Period = { from: "2000-01-01T00:00:00.000Z", to: "2100-01-01T00:00:00.000Z" };
+
 export function DrillStat({
   filter,
   title,
   children,
   block = true,
+  period: periodOverride,
 }: {
   filter: string;
   title: string;
   children: React.ReactNode;
   block?: boolean;
+  period?: Period;
 }) {
-  const period = useContext(PeriodContext);
+  const contextPeriod = useContext(PeriodContext);
+  const period = periodOverride ?? contextPeriod;
   const [open, setOpen] = useState(false);
   if (!period) return <>{children}</>;
 
@@ -35,8 +41,8 @@ export function DrillStat({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="drill-trigger"
-        title="Ver los leads"
+        className={block ? "drill-trigger drill-block" : "drill-trigger"}
+        title="Ver la lista de leads"
         style={{ display: block ? "block" : "inline", width: block ? "100%" : undefined }}
       >
         {children}
