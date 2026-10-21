@@ -2,6 +2,9 @@
 // servidor. Cada porción lleva su color fijo (el color sigue a la opción, no
 // a su posición), un hueco de 2px del color de la card entre porciones, y la
 // leyenda al lado repite cantidad y % para que nunca dependa solo del color.
+// Con `drill`, cada fila de la leyenda abre el listado de esos leads.
+
+import { DrillStat } from "@/components/kommo/LeadsDrilldown";
 
 export type DonutSlice = { label: string; count: number; color: string };
 
@@ -26,7 +29,15 @@ function arcPath(start: number, end: number) {
   return `M${x1} ${y1} A${R_OUTER} ${R_OUTER} 0 ${large} 1 ${x2} ${y2} L${x3} ${y3} A${R_INNER} ${R_INNER} 0 ${large} 0 ${x4} ${y4} Z`;
 }
 
-export function DonutChart({ slices, centerLabel }: { slices: DonutSlice[]; centerLabel: string }) {
+export function DonutChart({
+  slices,
+  centerLabel,
+  drill,
+}: {
+  slices: DonutSlice[];
+  centerLabel: string;
+  drill?: { filterPrefix: string; title: string };
+}) {
   const total = slices.reduce((s, x) => s + x.count, 0);
   const visible = slices.filter((s) => s.count > 0);
   const arcs = visible.map((s, i) => {
@@ -61,14 +72,23 @@ export function DonutChart({ slices, centerLabel }: { slices: DonutSlice[]; cent
       </svg>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "0.55rem", flex: 1, minWidth: 160 }}>
-        {arcs.map((a) => (
-          <div key={a.label} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.76rem" }}>
-            <span style={{ width: 10, height: 10, borderRadius: 3, background: a.color, flexShrink: 0 }} />
-            <span style={{ flex: 1 }}>{a.label}</span>
-            <span style={{ fontWeight: 700 }}>{a.pct.toFixed(1)}%</span>
-            <span style={{ color: "var(--text-secondary)", minWidth: 32, textAlign: "right" }}>{a.count}</span>
-          </div>
-        ))}
+        {arcs.map((a) => {
+          const row = (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.76rem" }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: a.color, flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>{a.label}</span>
+              <span style={{ fontWeight: 700 }}>{a.pct.toFixed(1)}%</span>
+              <span style={{ color: "var(--text-secondary)", minWidth: 32, textAlign: "right" }}>{a.count}</span>
+            </div>
+          );
+          return drill ? (
+            <DrillStat key={a.label} filter={`${drill.filterPrefix}:${a.label}`} title={`${drill.title}: ${a.label}`}>
+              {row}
+            </DrillStat>
+          ) : (
+            <div key={a.label}>{row}</div>
+          );
+        })}
       </div>
     </div>
   );

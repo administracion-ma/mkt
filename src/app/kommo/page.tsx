@@ -14,6 +14,8 @@ import {
   interestBreakdown,
   capitalBreakdown,
   timeToWin,
+  qualificationRate,
+  callRate,
   type AnswerBreakdown,
   INTEREST_OPTIONS,
   INTEREST_COLORS,
@@ -27,6 +29,7 @@ import { PeriodFilter } from "@/components/PeriodFilter";
 import { StatDelta } from "@/components/StatDelta";
 import { StatLabel } from "@/components/StatLabel";
 import { DonutChart } from "@/components/DonutChart";
+import { DrillPeriod, DrillStat } from "@/components/kommo/LeadsDrilldown";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +56,7 @@ function fmtDays(d: number | null): string {
 // Torta de una pregunta del bot. Base = los que respondieron con una de las
 // opciones conocidas (n), así es comparable con estadísticas de otras
 // campañas; las respuestas escritas a mano se informan aparte.
-function AnswerDonutCard({ b, options, colors }: { b: AnswerBreakdown; options: readonly string[]; colors: Record<string, string> }) {
+function AnswerDonutCard({ b, options, colors, filterPrefix }: { b: AnswerBreakdown; options: readonly string[]; colors: Record<string, string>; filterPrefix: string }) {
   const slices = options.map((o) => ({ label: o, count: b.rows.find((r) => r.value === o)?.count ?? 0, color: colors[o] }));
   const n = slices.reduce((s, x) => s + x.count, 0);
   const other = b.answeredCount - n;
@@ -69,7 +72,7 @@ function AnswerDonutCard({ b, options, colors }: { b: AnswerBreakdown; options: 
       {n === 0 ? (
         <p style={{ fontSize: "0.75rem", color: "var(--text-tertiary)", margin: 0 }}>Nadie respondió en este período.</p>
       ) : (
-        <DonutChart slices={slices} centerLabel="respondieron" />
+        <DonutChart slices={slices} centerLabel="respondieron" drill={{ filterPrefix, title: b.title }} />
       )}
     </div>
   );
@@ -168,6 +171,9 @@ export default async function KommoPage({
   const interest = interestBreakdown(periodLeads);
   const capital = capitalBreakdown(periodLeads);
   const winTime = timeToWin(periodLeads);
+  const qualified = qualificationRate(periodLeads, pipelines);
+  const prevQualified = qualificationRate(prevLeads, pipelines);
+  const called = callRate(periodLeads);
   const prevWinTime = timeToWin(prevLeads);
   const lossBreakdown = lossReasonsBreakdown(periodLeads, lossReasons);
   const lostCount = periodLeads.filter((l) => l.statusId === LOST_STATUS_ID).length;
@@ -197,25 +203,36 @@ export default async function KommoPage({
 
       <PeriodFilter />
 
+      <DrillPeriod from={fromDate.toISOString()} to={toDate.toISOString()}>
+      <p style={{ fontSize: "0.7rem", color: "var(--text-tertiary)", margin: "0.75rem 0 0" }}>Tocá cualquier número del período para ver la lista de leads y abrirlos en Kommo.</p>
+
       {/* KPIs del período elegido */}
       <div className="stats-grid" style={{ marginTop: "1.25rem" }}>
         <div className="stat-card">
           <StatLabel label="Leads del período" info="Cantidad de leads nuevos creados en Kommo durante el período elegido." />
-          <div className="stat-value accent">{fmt(periodLeads.length)}</div>
+          <DrillStat filter="all" title="Leads del período">
+            <div className="stat-value accent">{fmt(periodLeads.length)}</div>
+          </DrillStat>
           <StatDelta curr={periodLeads.length} prev={prevLeads.length} />
         </div>
         <div className="stat-card">
           <StatLabel label="Cierres" info="Leads de este período que llegaron a la etapa de ganado." />
-          <div className="stat-value accent">{fmt(wonLeads.length)}</div>
+          <DrillStat filter="won" title="Cierres del período">
+            <div className="stat-value accent">{fmt(wonLeads.length)}</div>
+          </DrillStat>
           <StatDelta curr={wonLeads.length} prev={prevWonLeads.length} />
         </div>
         <div className="stat-card">
           <StatLabel label="Tasa de cierre" info="Cierres del período sobre el total de leads del período. No compara contra el período anterior porque depende mucho del volumen de cada mes." />
-          <div className="stat-value">{closeRatePeriod != null ? `${closeRatePeriod.toFixed(0)}%` : "—"}</div>
+          <DrillStat filter="won" title="Cierres del período">
+            <div className="stat-value">{closeRatePeriod != null ? `${closeRatePeriod.toFixed(1)}%` : "—"}</div>
+          </DrillStat>
         </div>
         <div className="stat-card">
           <StatLabel label="Valor ganado" info="Suma del campo precio de los leads ganados en el período, en la moneda de tu cuenta de Kommo." />
-          <div className="stat-value accent">{fmt(wonValue)}</div>
+          <DrillStat filter="won" title="Cierres del período">
+            <div className="stat-value accent">{fmt(wonValue)}</div>
+          </DrillStat>
           <StatDelta curr={wonValue} prev={prevWonValue} />
         </div>
         <div className="stat-card">
@@ -223,10 +240,37 @@ export default async function KommoPage({
             label="Tiempo hasta ganado"
             info="Promedio de tiempo entre el primer mensaje del lead (cuando se crea en Kommo) y que pasa a ganado, para los leads del período que ya se ganaron. Abajo, la mediana: el caso típico, sin que unos pocos cierres muy lentos la inflen."
           />
-          <div className="stat-value">{fmtDays(winTime.avgDays)}</div>
+          <DrillStat filter="won" title="Cierres del período">
+            <div className="stat-value">{fmtDays(winTime.avgDays)}</div>
+          </DrillStat>
           <div style={{ fontSize: "0.68rem", color: "var(--text-tertiary)", marginTop: "0.25rem" }}>
             Mediana {fmtDays(winTime.medianDays)} · {winTime.count} cierre{winTime.count !== 1 ? "s" : ""}
             {prevWinTime.avgDays != null && ` · antes ${fmtDays(prevWinTime.avgDays)}`}
+          </div>
+        </div>
+        <div className="stat-card">
+          <StatLabel
+            label="Ingreso → calificado"
+            info="De los leads que entraron en el período, cuántos pasaron a la etapa Calificado (o más adelante: propuesta, decisión, ganado). Usa el historial de Kommo, así que cuenta también a los que se calificaron y después se perdieron."
+          />
+          <DrillStat filter="qualified" title="Leads que pasaron a calificado">
+            <div className="stat-value">{qualified.rate != null ? `${qualified.rate.toFixed(1)}%` : "—"}</div>
+          </DrillStat>
+          <div style={{ fontSize: "0.68rem", color: "var(--text-tertiary)", marginTop: "0.25rem" }}>
+            {qualified.count} de {qualified.total}
+            {prevQualified.rate != null && ` · antes ${prevQualified.rate.toFixed(1)}%`}
+          </div>
+        </div>
+        <div className="stat-card">
+          <StatLabel
+            label="Mensaje → llamada"
+            info='Leads del período con el interruptor "Llamado" activado en su tarjeta de Kommo, sobre el total que entró. Depende de que el vendedor lo marque.'
+          />
+          <DrillStat filter="called" title="Leads con llamada">
+            <div className="stat-value">{called.rate != null ? `${called.rate.toFixed(1)}%` : "—"}</div>
+          </DrillStat>
+          <div style={{ fontSize: "0.68rem", color: "var(--text-tertiary)", marginTop: "0.25rem" }}>
+            {called.count} de {called.total} con &quot;Llamado&quot; marcado
           </div>
         </div>
       </div>
@@ -236,11 +280,14 @@ export default async function KommoPage({
         <div className="card" style={{ marginTop: "1.5rem" }}>
           <h2 style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.2rem" }}>💬 Mensajes por canal</h2>
           <p style={{ fontSize: "0.72rem", color: "var(--text-tertiary)", margin: "0 0 1rem" }}>
-            Por dónde escribió cada lead que entró en el período, y cuántos de esos terminaron ganados.
+            Por dónde escribió cada lead que entró en el período, cuántos se calificaron y cuántos terminaron ganados.
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
-            {channels.map((c) => (
-              <div key={c.channel} style={{ padding: "0.9rem 1rem", background: "var(--surface2)", borderRadius: 10, borderLeft: `3px solid ${c.color}` }}>
+            {channels.map((c) => {
+              const cq = qualificationRate(periodLeads.filter((l) => (l.channel ?? "none") === c.channel), pipelines);
+              return (
+              <DrillStat key={c.channel} filter={`channel:${c.channel}`} title={`Leads de ${c.label}`}>
+              <div style={{ padding: "0.9rem 1rem", background: "var(--surface2)", borderRadius: 10, borderLeft: `3px solid ${c.color}` }}>
                 <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{c.label}</div>
                 <div style={{ fontSize: "1.6rem", fontWeight: 700, margin: "0.15rem 0" }}>
                   {fmt(c.count)} <span style={{ fontSize: "0.55em", color: "var(--text-tertiary)", fontWeight: 500 }}>{c.pct.toFixed(0)}%</span>
@@ -248,9 +295,12 @@ export default async function KommoPage({
                 <div style={{ fontSize: "0.7rem", color: "var(--text-tertiary)" }}>
                   {c.won} ganado{c.won !== 1 ? "s" : ""}
                   {c.closeRate != null && ` · ${c.closeRate.toFixed(1)}% cierre`}
+                  {cq.rate != null && ` · ${cq.rate.toFixed(0)}% calificados`}
                 </div>
               </div>
-            ))}
+              </DrillStat>
+              );
+            })}
           </div>
           <div style={{ display: "flex", height: 10, borderRadius: 6, overflow: "hidden", marginTop: "1rem" }}>
             {channels.map((c) => (
@@ -304,7 +354,9 @@ export default async function KommoPage({
           {concretion.steps.map((step, i) => (
             <div key={step.label} style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: "1.8rem", fontWeight: 700 }}>{fmt(step.count)}</div>
+                <DrillStat filter={["all", "inprog", "won"][i]} title={step.label}>
+                  <div style={{ fontSize: "1.8rem", fontWeight: 700 }}>{fmt(step.count)}</div>
+                </DrillStat>
                 <div style={{ fontSize: "0.72rem", color: "var(--text-tertiary)" }}>{step.label}</div>
               </div>
               {i < concretion.steps.length - 1 && <span style={{ color: "var(--text-tertiary)", fontSize: "1.2rem" }}>→</span>}
@@ -340,13 +392,13 @@ export default async function KommoPage({
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             {funnel.map((stage) => (
-              <div key={stage.statusId}>
+              <DrillStat key={stage.statusId} filter={`pipeline:${mainPipeline.id}|status:${stage.statusId}`} title={`${mainPipeline.name.trim()} — ${stage.label}`}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", marginBottom: "0.2rem" }}>
                   <span>{stage.label}</span>
                   <span style={{ fontWeight: 600 }}>{stage.count} <span style={{ color: "var(--text-tertiary)", fontWeight: 500 }}>({stage.pct.toFixed(0)}%)</span></span>
                 </div>
                 <Bar pct={stage.pct} color={stage.color ?? "var(--accent)"} />
-              </div>
+              </DrillStat>
             ))}
           </div>
 
@@ -373,8 +425,14 @@ export default async function KommoPage({
                         const n = st.counts[c.channel] ?? 0;
                         return (
                           <td key={c.channel} style={{ textAlign: "right" }}>
-                            {n}{" "}
-                            <span style={{ color: "var(--text-tertiary)" }}>({c.total > 0 ? ((n / c.total) * 100).toFixed(0) : 0}%)</span>
+                            <DrillStat
+                              block={false}
+                              filter={`pipeline:${mainPipeline.id}|status:${st.statusId}|channel:${c.channel}`}
+                              title={`${st.label} — ${c.label}`}
+                            >
+                              {n}{" "}
+                              <span style={{ color: "var(--text-tertiary)" }}>({c.total > 0 ? ((n / c.total) * 100).toFixed(0) : 0}%)</span>
+                            </DrillStat>
                           </td>
                         );
                       })}
@@ -401,7 +459,8 @@ export default async function KommoPage({
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.7rem" }}>
             {leaderboard.map((row, i) => (
-              <div key={row.userId} style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+              <DrillStat key={row.userId} filter={`user:${row.userId}`} title={`Leads de ${row.name}`}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
                 <div style={{
                   width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: "0.72rem", fontWeight: 700, background: i === 0 ? "var(--accent)" : "var(--surface2)",
@@ -418,6 +477,7 @@ export default async function KommoPage({
                 </div>
                 <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--accent)", flexShrink: 0 }}>{row.won}</div>
               </div>
+              </DrillStat>
             ))}
           </div>
         </div>
@@ -431,7 +491,7 @@ export default async function KommoPage({
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
             {lossBreakdown.map((row, i) => (
-              <div key={row.reason}>
+              <DrillStat key={row.reasonId} filter={`lost|loss:${row.reasonId}`} title={`Perdidos — ${row.reason}`}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", marginBottom: "0.2rem" }}>
                   <span style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: LOSS_COLORS[i % LOSS_COLORS.length], flexShrink: 0 }} />
@@ -440,7 +500,7 @@ export default async function KommoPage({
                   <span style={{ fontWeight: 600 }}>{row.count} <span style={{ color: "var(--text-tertiary)", fontWeight: 500 }}>({row.pct.toFixed(0)}%)</span></span>
                 </div>
                 <Bar pct={row.pct} color={LOSS_COLORS[i % LOSS_COLORS.length]} />
-              </div>
+              </DrillStat>
             ))}
           </div>
         </div>
@@ -448,8 +508,8 @@ export default async function KommoPage({
 
       <h2 style={{ fontSize: "0.9rem", fontWeight: 600, margin: "1.5rem 0 0.85rem" }}>👤 Perfil de leads</h2>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
-        <AnswerDonutCard b={interest} options={INTEREST_OPTIONS} colors={INTEREST_COLORS} />
-        <AnswerDonutCard b={capital} options={CAPITAL_OPTIONS} colors={CAPITAL_COLORS} />
+        <AnswerDonutCard b={interest} options={INTEREST_OPTIONS} colors={INTEREST_COLORS} filterPrefix="interest" />
+        <AnswerDonutCard b={capital} options={CAPITAL_OPTIONS} colors={CAPITAL_COLORS} filterPrefix="capital" />
       </div>
 
       {breakdowns.length > 0 && (
@@ -478,6 +538,7 @@ export default async function KommoPage({
           </div>
         </>
       )}
+      </DrillPeriod>
     </main>
   );
 }

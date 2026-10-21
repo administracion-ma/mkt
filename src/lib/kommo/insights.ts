@@ -1,5 +1,5 @@
 import type { kommoLeads } from "@/db/schema";
-import type { KommoCustomField, KommoLossReason, KommoPipeline, KommoUser } from "@/lib/kommo/api";
+import { QUALIFIED_STAGE_PATTERN, type KommoCustomField, type KommoLossReason, type KommoPipeline, type KommoUser } from "@/lib/kommo/api";
 
 export type KommoLeadRow = typeof kommoLeads.$inferSelect;
 
@@ -183,7 +183,7 @@ export function salesLeaderboard(leads: KommoLeadRow[], users: KommoUser[], pipe
     .sort((a, b) => b.won - a.won);
 }
 
-export type LossReasonRow = { reason: string; count: number; pct: number };
+export type LossReasonRow = { reasonId: string; reason: string; count: number; pct: number };
 
 // Desglose de por qué se perdieron los leads del período — Kommo guarda el
 // motivo como un ID de una lista configurable en la cuenta (/leads/loss_reasons).
@@ -194,12 +194,17 @@ export function lossReasonsBreakdown(leads: KommoLeadRow[], reasons: KommoLossRe
   const counts = new Map<string, number>();
 
   for (const l of lost) {
-    const label = l.lossReasonId ? nameById.get(l.lossReasonId) ?? `Motivo #${l.lossReasonId}` : "Sin motivo especificado";
-    counts.set(label, (counts.get(label) ?? 0) + 1);
+    const key = l.lossReasonId ?? "none";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
 
   return Array.from(counts.entries())
-    .map(([reason, count]) => ({ reason, count, pct: total > 0 ? (count / total) * 100 : 0 }))
+    .map(([reasonId, count]) => ({
+      reasonId,
+      reason: reasonId === "none" ? "Sin motivo especificado" : nameById.get(reasonId) ?? `Motivo #${reasonId}`,
+      count,
+      pct: total > 0 ? (count / total) * 100 : 0,
+    }))
     .sort((a, b) => b.count - a.count);
 }
 
@@ -270,7 +275,7 @@ export function funnelByChannel(leads: KommoLeadRow[], pipeline: KommoPipeline):
 // y hay que normalizar las variantes de escritura. "Capital" además existe
 // TRES veces (Capital, Capital, CAPITAL): se toma el primero que tenga valor.
 
-function fieldValue(l: KommoLeadRow, matches: (name: string) => boolean): string | null {
+function fieldValue(l: Pick<KommoLeadRow, "customFields">, matches: (name: string) => boolean): string | null {
   for (const f of l.customFields ?? []) {
     if (!matches(f.fieldName)) continue;
     const v = f.values.find((x) => x.value != null && String(x.value).trim() !== "");
@@ -296,20 +301,30 @@ export function normalizeInterest(raw: string): string {
   return OTHER_ANSWER;
 }
 
-// "$5.000 a $15.000" es una opción vieja del bot que todavía aparece en
-// algunos leads: va entre 5-10k y 10-15k para respetar el orden de montos.
-export const CAPITAL_OPTIONS = ["Menos de $5.000", "$5.000 a $10.000", "$5.000 a $15.000", "$10.000 a $15.000", "Más de $15.000"] as const;
+// Rangos que el bot fue ofreciendo a lo largo del tiempo (los textos
+// cambiaron: "$4000 a $10.000 US", "5.000 a 10.000 USD", etc. — se agrupan).
+// "$5.000 a $15.000" y "$10.000 a $30.000" son opciones viejas que todavía
+// aparecen; se respetan como rango propio en vez de inventar un reparto.
+export const CAPITAL_OPTIONS = [
+  "Menos de $5.000",
+  "$5.000 a $10.000",
+  "$5.000 a $15.000",
+  "$10.000 a $30.000",
+  "Más de $20.000",
+  "Más de $50.000",
+] as const;
 // Un solo tono de menor a mayor monto (son rangos ordenados, no categorías).
 export const CAPITAL_COLORS: Record<string, string> = {
   "Menos de $5.000": "#184f95",
-  "$5.000 a $10.000": "#2a78d6",
-  "$5.000 a $15.000": "#5598e7",
-  "$10.000 a $15.000": "#86b6ef",
-  "Más de $15.000": "#b7d3f6",
+  "$5.000 a $10.000": "#256abf",
+  "$5.000 a $15.000": "#3987e5",
+  "$10.000 a $30.000": "#6da7ec",
+  "Más de $20.000": "#9ec5f4",
+  "Más de $50.000": "#cde2fb",
 };
 
 // Lee los montos del texto ("$5.000 a $10.000", "5.000 a 10.000 USD",
-// "Menos de $4500", "+$20.000") y lo ubica en un rango fijo.
+// "Menos de $4500", "+$50.000 US") y lo ubica en un rango fijo.
 export function normalizeCapital(raw: string): string {
   const v = raw.toLowerCase();
   const nums = (v.match(/\d[\d.,]*/g) ?? []).map((n) => Number(n.replace(/[.,]/g, ""))).filter((n) => n > 0);
@@ -317,22 +332,48 @@ export function normalizeCapital(raw: string): string {
   const lo = Math.min(...nums);
   const hi = Math.max(...nums);
   if (v.includes("menos") || hi < 5000) return "Menos de $5.000";
-  if (v.includes("+") || v.includes("más") || v.includes("mas de") || lo >= 15000) return "Más de $15.000";
+  if (v.includes("+") || v.includes("más") || v.includes("mas de")) {
+    if (lo >= 50000) return "Más de $50.000";
+    if (lo >= 20000) return "Más de $20.000";
+    return OTHER_ANSWER;
+  }
   if (hi <= 10000) return "$5.000 a $10.000";
-  if (lo >= 10000) return "$10.000 a $15.000";
-  return `$${lo.toLocaleString("es-AR")} a $${hi.toLocaleString("es-AR")}`; // rango viejo (ej: 5.000 a 15.000)
+  if (hi <= 15000 && lo < 10000) return "$5.000 a $15.000";
+  if (lo >= 10000 && hi <= 30000) return "$10.000 a $30.000";
+  if (lo >= 50000) return "Más de $50.000";
+  if (lo >= 20000) return "Más de $20.000";
+  return OTHER_ANSWER;
+}
+
+// Algunos leads tienen el monto escrito en el campo "Interes" (ej: "+50.000
+// USD") — es una respuesta de capital, no de interés.
+const looksLikeAmount = (raw: string) => /^[\s+$]*\$?\s*\d[\d.,]{3,}/.test(raw);
+const isInterestField = (n: string) => /inter[eé]s/i.test(n);
+const isCapitalField = (n: string) => /capital/i.test(n);
+
+// Respuesta normalizada de cada pregunta para un lead (null = no respondió).
+export function interestOf(l: KommoLeadRow): string | null {
+  const raw = fieldValue(l, isInterestField);
+  if (!raw || looksLikeAmount(raw)) return null;
+  return normalizeInterest(raw);
+}
+
+export function capitalOf(l: KommoLeadRow): string | null {
+  const raw = fieldValue(l, isCapitalField);
+  if (raw) return normalizeCapital(raw);
+  const interestRaw = fieldValue(l, isInterestField);
+  return interestRaw && looksLikeAmount(interestRaw) ? normalizeCapital(interestRaw) : null;
 }
 
 export type AnswerBreakdown = { title: string; rows: FieldBreakdownRow[]; answeredCount: number; totalCount: number };
 
-function answerBreakdown(leads: KommoLeadRow[], title: string, order: readonly string[], matches: (name: string) => boolean, normalize: (raw: string) => string): AnswerBreakdown {
+function answerBreakdown(leads: KommoLeadRow[], title: string, order: readonly string[], answerOf: (l: KommoLeadRow) => string | null): AnswerBreakdown {
   const counts = new Map<string, number>();
   let answered = 0;
   for (const l of leads) {
-    const raw = fieldValue(l, matches);
-    if (!raw) continue;
+    const key = answerOf(l);
+    if (!key) continue;
     answered++;
-    const key = normalize(raw);
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   const rank = (v: string) => (order.indexOf(v) === -1 ? order.length : order.indexOf(v));
@@ -345,11 +386,56 @@ function answerBreakdown(leads: KommoLeadRow[], title: string, order: readonly s
 // % sobre los que RESPONDIERON (no sobre el total): así los porcentajes de
 // cada opción suman 100% y no se diluyen con los que no contestaron.
 export function interestBreakdown(leads: KommoLeadRow[]): AnswerBreakdown {
-  return answerBreakdown(leads, "Interés", INTEREST_OPTIONS, (n) => /inter[eé]s/i.test(n), normalizeInterest);
+  return answerBreakdown(leads, "Interés", INTEREST_OPTIONS, interestOf);
 }
 
 export function capitalBreakdown(leads: KommoLeadRow[]): AnswerBreakdown {
-  return answerBreakdown(leads, "Capital disponible", CAPITAL_OPTIONS, (n) => /capital/i.test(n), normalizeCapital);
+  return answerBreakdown(leads, "Capital disponible", CAPITAL_OPTIONS, capitalOf);
+}
+
+// ── Calificación y llamadas ──────────────────────────────────────────────────
+
+// Etapas que implican "ya pasó por calificado": la de calificado y las que
+// le siguen en el pipeline, salvo perdido y las de "en pausa" (seguimiento
+// pasivo / posible interés futuro, a las que se puede llegar sin calificar).
+const PARKED_STAGE_PATTERN = /futuro|seguimiento/i;
+
+export function qualifiedStageKeys(pipelines: KommoPipeline[]): Set<string> {
+  const keys = new Set<string>();
+  for (const p of pipelines) {
+    const idx = p.statuses.findIndex((st) => QUALIFIED_STAGE_PATTERN.test(st.name));
+    if (idx === -1) continue;
+    for (const st of p.statuses.slice(idx)) {
+      if (String(st.id) === LOST_STATUS_ID || PARKED_STAGE_PATTERN.test(st.name)) continue;
+      keys.add(`${p.id}:${st.id}`);
+    }
+  }
+  return keys;
+}
+
+// Pasó a calificado = hay evento de pase a esa etapa en el historial, o hoy
+// está en calificado o más adelante, o se ganó.
+export function isQualified(l: KommoLeadRow, qualifiedKeys: Set<string>): boolean {
+  return l.qualifiedAt != null || l.statusId === WON_STATUS_ID || qualifiedKeys.has(`${l.pipelineId}:${l.statusId}`);
+}
+
+// Interruptor "Llamado" de la tarjeta del lead.
+export function isCalled(l: KommoLeadRow): boolean {
+  return (l.customFields ?? []).some(
+    (f) => /^llamad/i.test(f.fieldName) && f.values.some((v) => v.value === true || String(v.value).toLowerCase() === "true" || v.value === 1),
+  );
+}
+
+export type Rate = { count: number; total: number; rate: number | null };
+const rateOf = (count: number, total: number): Rate => ({ count, total, rate: total > 0 ? (count / total) * 100 : null });
+
+export function qualificationRate(leads: KommoLeadRow[], pipelines: KommoPipeline[]): Rate {
+  const keys = qualifiedStageKeys(pipelines);
+  return rateOf(leads.filter((l) => isQualified(l, keys)).length, leads.length);
+}
+
+export function callRate(leads: KommoLeadRow[]): Rate {
+  return rateOf(leads.filter(isCalled).length, leads.length);
 }
 
 // ── Tiempo hasta ganado ──────────────────────────────────────────────────────

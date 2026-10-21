@@ -402,10 +402,11 @@ export const kommoLeads = pgTable("kommo_leads", {
   lossReasonId: text("loss_reason_id"), // solo presente en leads perdidos
   sourceId: text("source_id"), // fuente de Kommo por la que entró el lead
   channel: text("channel"), // whatsapp | instagram | facebook | otro (null = sin dato)
+  qualifiedAt: timestamp("qualified_at", { withTimezone: true }), // primera vez que pasó a "calificado" (historial de Kommo)
   kommoCreatedAt: timestamp("kommo_created_at", { withTimezone: true }).notNull(),
   kommoUpdatedAt: timestamp("kommo_updated_at", { withTimezone: true }),
   customFields: jsonb("custom_fields").$type<
-    { fieldId: number; fieldName: string; fieldType: string; values: { value: string | number | null; enumId: number | null }[] }[]
+    { fieldId: number; fieldName: string; fieldType: string; values: { value: string | number | boolean | null; enumId: number | null }[] }[]
   >(),
   syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
 });

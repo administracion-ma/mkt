@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { kommoLeads } from "@/db/schema";
-import { getChannelMaps, getLeadsCreatedBetween, type KommoChannel, type KommoLeadRaw } from "@/lib/kommo/api";
+import { getChannelMaps, getLeadsCreatedBetween, getPipelines, getQualifiedAtByLead, type KommoChannel, type KommoLeadRaw } from "@/lib/kommo/api";
 
 function toDate(unix: number | null): Date | null {
   return unix != null ? new Date(unix * 1000) : null;
@@ -9,7 +9,7 @@ function toDate(unix: number | null): Date | null {
 
 type ChannelMaps = { byLead: Map<string, KommoChannel>; bySource: Map<string, KommoChannel> };
 
-function mapLead(l: KommoLeadRaw, channels: ChannelMaps) {
+function mapLead(l: KommoLeadRaw, channels: ChannelMaps, qualifiedAt: Map<string, Date>) {
   const sourceId = l.source_id != null ? String(l.source_id) : null;
   return {
     kommoLeadId: String(l.id),
@@ -22,6 +22,7 @@ function mapLead(l: KommoLeadRaw, channels: ChannelMaps) {
     lossReasonId: l.loss_reason_id != null ? String(l.loss_reason_id) : null,
     sourceId,
     channel: channels.byLead.get(String(l.id)) ?? (sourceId ? channels.bySource.get(sourceId) : undefined) ?? null,
+    qualifiedAt: qualifiedAt.get(String(l.id)) ?? null,
     kommoCreatedAt: toDate(l.created_at) ?? new Date(),
     kommoUpdatedAt: toDate(l.updated_at),
     customFields: (l.custom_fields_values ?? []).map((f) => ({
@@ -43,6 +44,7 @@ export async function syncKommoLeads(days = 400, maxPages?: number, talkPages?: 
   // En serie, no en paralelo: Kommo corta la conexión si se le pide demasiado rápido.
   const raw = await getLeadsCreatedBetween(from, to, maxPages);
   const channels = await getChannelMaps(talkPages);
+  const qualifiedAt = await getQualifiedAtByLead(await getPipelines(), from);
   if (raw.length === 0) return { synced: 0 };
 
   // Insertar de a 1 por lead (un viaje a la base cada uno) escalaba mal: con
@@ -54,7 +56,7 @@ export async function syncKommoLeads(days = 400, maxPages?: number, talkPages?: 
   const CHUNK = 300;
   let synced = 0;
   for (let i = 0; i < raw.length; i += CHUNK) {
-    const chunk = raw.slice(i, i + CHUNK).map((l) => mapLead(l, channels));
+    const chunk = raw.slice(i, i + CHUNK).map((l) => mapLead(l, channels, qualifiedAt));
     await db
       .insert(kommoLeads)
       .values(chunk)
@@ -70,6 +72,8 @@ export async function syncKommoLeads(days = 400, maxPages?: number, talkPages?: 
           lossReasonId: sql`excluded.loss_reason_id`,
           sourceId: sql`excluded.source_id`,
           channel: sql`excluded.channel`,
+          // Si el evento ya no está en la ventana leída, conservar el que había.
+          qualifiedAt: sql`coalesce(excluded.qualified_at, ${kommoLeads.qualifiedAt})`,
           kommoCreatedAt: sql`excluded.kommo_created_at`,
           kommoUpdatedAt: sql`excluded.kommo_updated_at`,
           customFields: sql`excluded.custom_fields`,

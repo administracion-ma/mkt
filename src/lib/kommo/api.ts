@@ -111,7 +111,7 @@ export type KommoLeadRaw = {
     field_id: number;
     field_name: string;
     field_type: string;
-    values: Array<{ value: string | number | null; enum_id?: number | null }>;
+    values: Array<{ value: string | number | boolean | null; enum_id?: number | null }>;
   }> | null;
 };
 
@@ -177,6 +177,42 @@ export async function getChannelMaps(maxPages = 40): Promise<{ byLead: Map<strin
     if (talks.length < 250) break;
   }
   return { byLead, bySource };
+}
+
+// Etapa que cuenta como "calificado" en cada pipeline (por nombre: en esta
+// cuenta "Calificado" / "Lead calificado"). Si cambian el nombre en Kommo,
+// ajustar acá.
+export const QUALIFIED_STAGE_PATTERN = /calific/i;
+
+// Primer momento en que cada lead entró a la etapa "calificado" de su
+// pipeline, según el historial de eventos de Kommo. Hace falta el historial
+// (no alcanza con la etapa actual) porque un lead que se calificó y después
+// se perdió hoy figura en "perdido".
+export async function getQualifiedAtByLead(pipelines: KommoPipeline[], from: Date, maxPages = 200): Promise<Map<string, Date>> {
+  const targets = pipelines.flatMap((p) => {
+    const st = p.statuses.find((s) => QUALIFIED_STAGE_PATTERN.test(s.name));
+    return st ? [{ pipelineId: p.id, statusId: st.id }] : [];
+  });
+  const out = new Map<string, Date>();
+  if (targets.length === 0) return out;
+  const filter = targets
+    .map((t, i) => `filter[value_after][leads_statuses][${i}][pipeline_id]=${t.pipelineId}&filter[value_after][leads_statuses][${i}][status_id]=${t.statusId}`)
+    .join("&");
+  const fromUnix = Math.floor(from.getTime() / 1000);
+  for (let page = 1; page <= maxPages; page++) {
+    const body = (await kommoGet(
+      `/events?limit=100&page=${page}&filter[type]=lead_status_changed&filter[created_at][from]=${fromUnix}&${filter}`,
+    )) as { _embedded?: { events?: Array<{ entity_id: number; created_at: number }> } } | null;
+    const events = body?._embedded?.events ?? [];
+    for (const e of events) {
+      const key = String(e.entity_id);
+      const at = new Date(e.created_at * 1000);
+      const prev = out.get(key);
+      if (!prev || at < prev) out.set(key, at);
+    }
+    if (events.length < 100) break;
+  }
+  return out;
 }
 
 export type KommoUser = { id: number; name: string };
