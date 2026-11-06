@@ -16,6 +16,8 @@ import {
   timeToWin,
   qualificationRate,
   callRate,
+  adBreakdown,
+  type AdLevel,
   type AnswerBreakdown,
   INTEREST_OPTIONS,
   INTEREST_COLORS,
@@ -30,6 +32,7 @@ import { StatDelta } from "@/components/StatDelta";
 import { StatLabel } from "@/components/StatLabel";
 import { DonutChart } from "@/components/DonutChart";
 import { ALL_TIME, DrillPeriod, DrillStat } from "@/components/kommo/LeadsDrilldown";
+import { AdsSection } from "@/components/kommo/AdsSection";
 
 export const dynamic = "force-dynamic";
 
@@ -83,9 +86,10 @@ const LOSS_COLORS = ["#ef4444", "#f97316", "#eab308", "#a78bfa", "#60a5fa", "#2d
 export default async function KommoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; pipeline?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; pipeline?: string; adlevel?: string }>;
 }) {
-  const { from, to, pipeline: pipelineParam } = await searchParams;
+  const { from, to, pipeline: pipelineParam, adlevel } = await searchParams;
+  const adLevel: AdLevel = adlevel === "campaign" || adlevel === "adset" ? adlevel : "ad";
   const toDate = to ? new Date(to + "T23:59:59") : new Date();
   const fromDate = from ? new Date(from + "T00:00:00") : new Date(toDate.getTime() - 30 * 24 * 60 * 60 * 1000);
   const prevWindowFrom = new Date(fromDate.getTime() - (toDate.getTime() - fromDate.getTime()));
@@ -162,12 +166,22 @@ export default async function KommoPage({
     return `/kommo?${q.toString()}`;
   };
 
+  const adLevelHref = (level: AdLevel) => {
+    const q = new URLSearchParams();
+    if (from) q.set("from", from);
+    if (to) q.set("to", to);
+    if (pipelineParam) q.set("pipeline", pipelineParam);
+    q.set("adlevel", level);
+    return `/kommo?${q.toString()}`;
+  };
+
   const funnel = mainPipeline ? leadsFunnel(pipelineLeads, mainPipeline) : [];
   const channelFunnel = mainPipeline ? funnelByChannel(pipelineLeads, mainPipeline) : null;
   const totals = pipelineTotals(statusCounts, pipelines);
   const concretion = concretionFunnel(periodLeads, pipelines);
   const leaderboard = salesLeaderboard(periodLeads, users, pipelines);
   const channels = channelBreakdown(periodLeads);
+  const ads = adBreakdown(periodLeads, pipelines, adLevel);
   const interest = interestBreakdown(periodLeads);
   const capital = capitalBreakdown(periodLeads);
   const winTime = timeToWin(periodLeads);
@@ -309,6 +323,9 @@ export default async function KommoPage({
           </div>
         </div>
       )}
+
+      {/* Calidad de las respuestas por anuncio de Meta */}
+      <AdsSection data={ads} level={adLevel} levelHref={adLevelHref} />
 
       {/* Estado general — todo el histórico, no solo el período */}
       <div className="card" style={{ marginTop: "1.5rem" }}>

@@ -1,9 +1,13 @@
 import type { KommoPipeline } from "@/lib/kommo/api";
 import {
+  adRefOf,
+  capitalFloor,
   capitalOf,
   firstStageByPipeline,
+  hasAdTracking,
   interestOf,
   isCalled,
+  isQualityLead,
   isQualified,
   qualifiedStageKeys,
   LOST_STATUS_ID,
@@ -40,6 +44,16 @@ export function buildMatcher(filter: string, pipelines: KommoPipeline[]) {
         case "status": return l.statusId === value;
         case "loss": return (l.lossReasonId ?? "none") === value;
         case "user": return l.responsibleUserId === value;
+        // Anuncios (Meta): el valor va con encodeURIComponent porque los nombres traen "|" y ":".
+        case "campaign":
+        case "adset":
+        case "ad": return adRefOf(l, key)?.key === decodeURIComponent(value);
+        case "untracked": return !hasAdTracking(l);
+        case "answered": return interestOf(l) != null;
+        case "acumular": return interestOf(l) === "Acumular BTC";
+        case "cap4k": return (capitalFloor(l) ?? 0) >= 4000;
+        case "cap10k": return (capitalFloor(l) ?? 0) >= 10000;
+        case "quality": return isQualityLead(l);
         default: return false; // filtro desconocido: mejor lista vacía que una lista equivocada
       }
     });

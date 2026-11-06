@@ -457,3 +457,123 @@ export function timeToWin(leads: KommoLeadRow[]): TimeToWin {
   const median = days.length % 2 ? days[mid] : (days[mid - 1] + days[mid]) / 2;
   return { count: days.length, avgDays: avg, medianDays: median };
 }
+
+// ── Anuncios (Meta) ──────────────────────────────────────────────────────────
+// Cada lead que entra por un anuncio trae, en su tarjeta de Kommo, los IDs
+// y nombres de campaña / conjunto / anuncio (campos de seguimiento de Meta
+// Ads + los que completa el flujo: ad_id, ad_nombre, adset_nombre,
+// campana_nombre). Con eso se cruza la CALIDAD de las respuestas del bot
+// (interés, capital) contra el anuncio que las originó. Los leads de antes
+// de que existieran esos campos (o los orgánicos) no tienen anuncio.
+
+export type AdLevel = "campaign" | "adset" | "ad";
+export const AD_LEVELS: Array<{ level: AdLevel; label: string }> = [
+  { level: "campaign", label: "Campaña" },
+  { level: "adset", label: "Conjunto" },
+  { level: "ad", label: "Anuncio" },
+];
+
+const AD_FIELD_MATCHERS: Record<AdLevel, { id: RegExp; name: RegExp }> = {
+  campaign: { id: /id de campa[nñ]a/i, name: /^(campana_nombre|utm_campaign)$/i },
+  adset: { id: /id del conjunto/i, name: /^adset_nombre$/i },
+  ad: { id: /^ad_id$|id del anuncio/i, name: /^(ad_nombre|utm_content)$/i },
+};
+
+export type AdRef = { key: string; label: string };
+
+// A qué campaña / conjunto / anuncio pertenece un lead (null = sin dato).
+// La clave es el ID cuando está (el nombre puede cambiar o repetirse); si no
+// hay ID, el nombre. utm_content a veces trae solo el ID numérico: ahí no sirve de nombre.
+export function adRefOf(l: Pick<KommoLeadRow, "customFields">, level: AdLevel): AdRef | null {
+  const m = AD_FIELD_MATCHERS[level];
+  const id = fieldValue(l, (n) => m.id.test(n));
+  const name = (l.customFields ?? [])
+    .filter((f) => m.name.test(f.fieldName))
+    .flatMap((f) => f.values.map((v) => String(v.value ?? "").trim()))
+    .find((v) => v !== "" && !/^\d{10,}$/.test(v));
+  const key = id ?? name;
+  if (!key) return null;
+  return { key, label: name ?? `ID ${id}` };
+}
+
+export const hasAdTracking = (l: Pick<KommoLeadRow, "customFields">): boolean =>
+  adRefOf(l, "ad") != null || adRefOf(l, "adset") != null || adRefOf(l, "campaign") != null;
+
+// Piso del capital que dijo el lead, en USD: "$5.000 a $10.000" → 5000,
+// "+ 50.000 USD" → 50000, "Menos de $4500" → 0. null = no respondió.
+export function capitalFloor(l: KommoLeadRow): number | null {
+  const raw = fieldValue(l, isCapitalField) ?? ((r) => (r && looksLikeAmount(r) ? r : null))(fieldValue(l, isInterestField));
+  if (!raw) return null;
+  const v = raw.toLowerCase();
+  const nums = (v.match(/\d[\d.,]*/g) ?? []).map((n) => Number(n.replace(/[.,]/g, ""))).filter((n) => n > 0);
+  if (nums.length === 0) return null;
+  return v.includes("menos") ? 0 : Math.min(...nums);
+}
+
+export const QUALITY_MIN_CAPITAL = 4000;
+
+// Lead "de calidad" = dijo que quiere acumular BTC y tiene 4.000 USD o más.
+export function isQualityLead(l: KommoLeadRow): boolean {
+  return interestOf(l) === "Acumular BTC" && (capitalFloor(l) ?? 0) >= QUALITY_MIN_CAPITAL;
+}
+
+export type AdRow = {
+  key: string;
+  label: string;
+  leads: number;
+  answered: number; // respondieron la pregunta de interés
+  acumular: number;
+  cap4k: number; // capital de 4.000 USD o más
+  cap10k: number;
+  quality: number; // acumular BTC + capital >= 4.000
+  qualified: number;
+  called: number;
+  won: number;
+};
+
+export type AdBreakdown = { rows: AdRow[]; baseline: AdRow; tracked: number; total: number };
+
+function tally(key: string, label: string, leads: KommoLeadRow[], qualifiedKeys: Set<string>): AdRow {
+  let answered = 0, acumular = 0, cap4k = 0, cap10k = 0, quality = 0, qualified = 0, called = 0, won = 0;
+  for (const l of leads) {
+    const interest = interestOf(l);
+    const floor = capitalFloor(l);
+    if (interest) answered++;
+    if (interest === "Acumular BTC") acumular++;
+    if (floor != null && floor >= QUALITY_MIN_CAPITAL) cap4k++;
+    if (floor != null && floor >= 10000) cap10k++;
+    if (isQualityLead(l)) quality++;
+    if (isQualified(l, qualifiedKeys)) qualified++;
+    if (isCalled(l)) called++;
+    if (l.statusId === WON_STATUS_ID) won++;
+  }
+  return { key, label, leads: leads.length, answered, acumular, cap4k, cap10k, quality, qualified, called, won };
+}
+
+// Una fila por campaña / conjunto / anuncio, ordenadas por volumen, más una
+// fila de referencia con los leads SIN anuncio (orgánicos o sin seguimiento)
+// para comparar la calidad contra el promedio de lo que no viene de Meta.
+export function adBreakdown(leads: KommoLeadRow[], pipelines: KommoPipeline[], level: AdLevel): AdBreakdown {
+  const qualifiedKeys = qualifiedStageKeys(pipelines);
+  const groups = new Map<string, { label: string; leads: KommoLeadRow[] }>();
+  const untracked: KommoLeadRow[] = [];
+  for (const l of leads) {
+    const ref = adRefOf(l, level);
+    if (!ref) {
+      if (!hasAdTracking(l)) untracked.push(l);
+      continue;
+    }
+    const g = groups.get(ref.key) ?? { label: ref.label, leads: [] };
+    g.leads.push(l);
+    groups.set(ref.key, g);
+  }
+  const rows = Array.from(groups.entries())
+    .map(([key, g]) => tally(key, g.label, g.leads, qualifiedKeys))
+    .sort((a, b) => b.leads - a.leads);
+  return {
+    rows,
+    baseline: tally("untracked", "Sin anuncio (orgánico / sin seguimiento)", untracked, qualifiedKeys),
+    tracked: leads.length - untracked.length,
+    total: leads.length,
+  };
+}
